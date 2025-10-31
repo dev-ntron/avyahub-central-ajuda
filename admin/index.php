@@ -12,12 +12,14 @@ if (!isset($_SESSION['user_id']) && (!isset($_SESSION['admin_logged_in']) || $_S
 // Verificar timeout de sessão (2 horas)
 if (isset($_SESSION['login_time']) && (time() - $_SESSION['login_time']) > 7200) {
     session_destroy();
-    header('Location: /admin');
+    header('Location: ' . BASE_PATH . '/admin');
     exit;
 }
 
-// Roteamento simples admin
-$admin_path = trim(str_replace('/admin', '', parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH)), '/');
+// Roteamento simples admin com BASE_PATH
+$request_uri = $_SERVER['REQUEST_URI'];
+$admin_base = BASE_PATH . '/admin';
+$admin_path = trim(str_replace($admin_base, '', parse_url($request_uri, PHP_URL_PATH)), '/');
 
 switch ($admin_path) {
     case '':
@@ -38,6 +40,9 @@ switch ($admin_path) {
         break;
     case 'check':
         include __DIR__ . '/check.php';
+        break;
+    case 'upload':
+        include __DIR__ . '/upload.php';
         break;
     case 'logout':
         include __DIR__ . '/auth.php?action=logout';
