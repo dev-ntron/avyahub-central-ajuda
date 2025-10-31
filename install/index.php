@@ -174,6 +174,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($action === 'install') {
         $errors = [];
+
+        // Detectar BASE_PATH automaticamente com fallback para RAIZ '/'
+        $detectedBasePath = defined('BASE_PATH') ? BASE_PATH : '/';
+        if ($detectedBasePath === '' || $detectedBasePath === '//') { $detectedBasePath = '/'; }
+
         $cfg = [
             'DB_HOST' => trim((string)($_POST['db_host'] ?? '')),
             'DB_NAME' => trim((string)($_POST['db_name'] ?? '')),
@@ -185,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'APP_ENV' => ($_POST['app_env'] ?? 'development') === 'production' ? 'production' : 'development',
             'APP_DEBUG' => (($_POST['app_env'] ?? 'development') === 'development') ? 'true' : 'false',
             'APP_SECRET_KEY' => bin2hex(random_bytes(32)),
-            'BASE_PATH' => defined('BASE_PATH') ? BASE_PATH : '/ajuda'
+            'BASE_PATH' => $detectedBasePath
         ];
         if ($cfg['DB_HOST'] === '') $errors[] = 'Host do banco é obrigatório';
         if ($cfg['DB_NAME'] === '') $errors[] = 'Nome do banco é obrigatório';
@@ -201,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Executar todas as migrations de uma vez
                 runCompleteMigrations($pdo);
 
-                // Criar .env (inclui BASE_PATH)
+                // Criar .env (inclui BASE_PATH detectado, com fallback para '/')
                 $env = "DB_HOST={$cfg['DB_HOST']}\nDB_NAME={$cfg['DB_NAME']}\nDB_USER={$cfg['DB_USER']}\nDB_PASS={$cfg['DB_PASS']}\nBASE_PATH={$cfg['BASE_PATH']}\nSITE_URL=/\nUPLOADS_DIR=uploads/\nMAX_UPLOAD_SIZE=5242880\nAPP_ENV={$cfg['APP_ENV']}\nAPP_DEBUG={$cfg['APP_DEBUG']}\nAPP_TIMEZONE=America/Sao_Paulo\nENABLE_CACHE=true\nCACHE_DURATION=3600\nAPP_SECRET_KEY={$cfg['APP_SECRET_KEY']}\n";
                 if (@file_put_contents(__DIR__ . '/../.env', $env) === false) { throw new Exception('Não foi possível criar .env (permissões)'); }
                 @chmod(__DIR__ . '/../.env', 0640);
