@@ -49,21 +49,47 @@ function detectScheme() {
     }
     return 'http';
 }
+
 function detectHost() {
     if (!empty($_SERVER['HTTP_HOST'])) return $_SERVER['HTTP_HOST'];
     if (!empty($_SERVER['SERVER_NAME'])) return $_SERVER['SERVER_NAME'];
     return 'localhost';
 }
-$envBasePath = (string)env('BASE_PATH', '');
-$envBasePath = '/' . ltrim(rtrim($envBasePath, '/'), '/');
-if ($envBasePath === '//') { $envBasePath = '/'; }
-if ($envBasePath === '') { $envBasePath = '/'; }
 
-define('BASE_PATH', $envBasePath);
+// Detectar BASE_PATH automaticamente se .env não existir
+function detectBasePath() {
+    // Se .env existe, usar o valor lá definido
+    $envBasePath = (string)env('BASE_PATH', '');
+    if ($envBasePath !== '') {
+        $envBasePath = '/' . ltrim(rtrim($envBasePath, '/'), '/');
+        if ($envBasePath === '//') { $envBasePath = '/'; }
+        return $envBasePath;
+    }
+    
+    // Se .env não existe, detectar baseado na URL
+    $requestUri = $_SERVER['REQUEST_URI'] ?? '';
+    $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+    
+    // Tentar detectar se está em subpasta
+    $scriptDir = dirname($scriptName);
+    if ($scriptDir !== '/' && $scriptDir !== '') {
+        return $scriptDir;
+    }
+    
+    // Se detectar /ajuda na URL, usar como BASE_PATH
+    if (strpos($requestUri, '/ajuda') !== false) {
+        return '/ajuda';
+    }
+    
+    // Padrão para raiz
+    return '/';
+}
+
+$detectedBasePath = detectBasePath();
+define('BASE_PATH', $detectedBasePath);
 
 define('BASE_SCHEME', detectScheme());
 define('BASE_HOST', detectHost());
-
 define('BASE_URL', BASE_SCHEME . '://' . BASE_HOST . (BASE_PATH === '/' ? '' : BASE_PATH));
 
 function url($path = '') {
@@ -140,3 +166,18 @@ function createDatabaseConnection() {
         ]
     );
 }
+
+// Debug helper (apenas em desenvolvimento)
+function debug($var, $label = 'DEBUG') {
+    if (APP_DEBUG) {
+        echo "<pre style='background:#f0f0f0;padding:1rem;border:1px solid #ccc;margin:1rem;'>";
+        echo "<strong>$label:</strong>\n";
+        if (is_string($var) || is_numeric($var)) {
+            echo htmlspecialchars($var);
+        } else {
+            print_r($var);
+        }
+        echo "</pre>";
+    }
+}
+?>
