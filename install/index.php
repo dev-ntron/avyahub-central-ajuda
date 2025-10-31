@@ -34,6 +34,8 @@ if (file_exists($installed_file)) {
     exit;
 }
 
+require_once __DIR__ . '/../config.php';
+
 function checkRequirements() {
     $checks = [];
     $checks['php_version'] = ['name' => 'PHP 7.4+', 'status' => version_compare(PHP_VERSION, '7.4.0', '>='), 'current' => PHP_VERSION];
@@ -91,7 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'ADMIN_PASSWORD' => (string)($_POST['admin_password'] ?? ''),
             'APP_ENV' => ($_POST['app_env'] ?? 'development') === 'production' ? 'production' : 'development',
             'APP_DEBUG' => (($_POST['app_env'] ?? 'development') === 'development') ? 'true' : 'false',
-            'APP_SECRET_KEY' => bin2hex(random_bytes(32))
+            'APP_SECRET_KEY' => bin2hex(random_bytes(32)),
+            'BASE_PATH' => defined('BASE_PATH') ? BASE_PATH : '/ajuda'
         ];
         if ($cfg['DB_HOST'] === '') $errors[] = 'Host do banco é obrigatório';
         if ($cfg['DB_NAME'] === '') $errors[] = 'Nome do banco é obrigatório';
@@ -110,8 +113,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 createTables($pdo);
                 addAuthTables($pdo);
 
-                // 2) Criar .env (sem ADMIN_*)
-                $env = "DB_HOST={$cfg['DB_HOST']}\nDB_NAME={$cfg['DB_NAME']}\nDB_USER={$cfg['DB_USER']}\nDB_PASS={$cfg['DB_PASS']}\n\nSITE_URL=/\nUPLOADS_DIR=uploads/\nMAX_UPLOAD_SIZE=5242880\nAPP_ENV={$cfg['APP_ENV']}\nAPP_DEBUG={$cfg['APP_DEBUG']}\nAPP_TIMEZONE=America/Sao_Paulo\nENABLE_CACHE=true\nCACHE_DURATION=3600\nAPP_SECRET_KEY={$cfg['APP_SECRET_KEY']}\n";
+                // 2) Criar .env (inclui BASE_PATH)
+                $env = "DB_HOST={$cfg['DB_HOST']}\nDB_NAME={$cfg['DB_NAME']}\nDB_USER={$cfg['DB_USER']}\nDB_PASS={$cfg['DB_PASS']}\nBASE_PATH={$cfg['BASE_PATH']}\nSITE_URL=/\nUPLOADS_DIR=uploads/\nMAX_UPLOAD_SIZE=5242880\nAPP_ENV={$cfg['APP_ENV']}\nAPP_DEBUG={$cfg['APP_DEBUG']}\nAPP_TIMEZONE=America/Sao_Paulo\nENABLE_CACHE=true\nCACHE_DURATION=3600\nAPP_SECRET_KEY={$cfg['APP_SECRET_KEY']}\n";
                 if (@file_put_contents(__DIR__ . '/../.env', $env) === false) { throw new Exception('Não foi possível criar .env (permissões)'); }
                 @chmod(__DIR__ . '/../.env', 0640);
 
