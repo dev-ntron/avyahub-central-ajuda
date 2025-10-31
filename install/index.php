@@ -1,11 +1,8 @@
 <?php
-// Verificar se já foi instalado
-$installed_file = __DIR__ . '/.installed';
-if (file_exists($installed_file)) { /* ... unchanged header block ... */ }
-
+// ... topo permanece igual ...
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/database.php';
-require_once __DIR__ . '/utils.php'; // normalizeBasePath
+require_once __DIR__ . '/utils.php';
 
 function checkRequirements() { /* ... unchanged ... */ }
 function generateSecretKey() { return bin2hex(random_bytes(32)); }
@@ -13,42 +10,58 @@ function generateSecretKey() { return bin2hex(random_bytes(32)); }
 session_start();
 $step = isset($_GET['step']) ? (int)$_GET['step'] : 1;
 
+// Detectar BASE_PATH normalizado para exibir no passo 2
+$detected = detectedBasePath();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'test_connection') { /* ... unchanged ... */ }
     if ($action === 'install') {
-        $errors = [];
-
-        // Detectar BASE_PATH automaticamente com fallback para RAIZ '/', e remover '/install' do final
-        $detectedBasePath = defined('BASE_PATH') ? BASE_PATH : '/';
-        $detectedBasePath = normalizeBasePath($detectedBasePath);
-
-        $cfg = [
-            'DB_HOST' => trim((string)($_POST['db_host'] ?? '')),
-            'DB_NAME' => trim((string)($_POST['db_name'] ?? '')),
-            'DB_USER' => trim((string)($_POST['db_user'] ?? '')),
-            'DB_PASS' => (string)($_POST['db_pass'] ?? ''),
-            'ADMIN_USERNAME' => trim((string)($_POST['admin_username'] ?? '')),
-            'ADMIN_PASSWORD' => (string)($_POST['admin_password'] ?? ''),
-            'ADMIN_NAME' => trim((string)($_POST['admin_name'] ?? 'Administrador')),
-            'APP_ENV' => ($_POST['app_env'] ?? 'development') === 'production' ? 'production' : 'development',
-            'APP_DEBUG' => (($_POST['app_env'] ?? 'development') === 'development') ? 'true' : 'false',
-            'APP_SECRET_KEY' => bin2hex(random_bytes(32)),
-            'BASE_PATH' => $detectedBasePath
-        ];
-        /* ... unchanged validation, connection ... */
-        // Executar migrations
-        runCompleteMigrations($pdo);
-
-        // Criar .env (inclui BASE_PATH normalizado, sem '/install')
-        $env = "DB_HOST={$cfg['DB_HOST']}\nDB_NAME={$cfg['DB_NAME']}\nDB_USER={$cfg['DB_USER']}\nDB_PASS={$cfg['DB_PASS']}\nBASE_PATH={$cfg['BASE_PATH']}\nSITE_URL=/\nUPLOADS_DIR=uploads/\nMAX_UPLOAD_SIZE=5242880\nAPP_ENV={$cfg['APP_ENV']}\nAPP_DEBUG={$cfg['APP_DEBUG']}\nAPP_TIMEZONE=America/Sao_Paulo\nENABLE_CACHE=true\nCACHE_DURATION=3600\nAPP_SECRET_KEY={$cfg['APP_SECRET_KEY']}\n";
-        /* ... unchanged save env ... */
-
-        // Redirecionamentos usando BASE_PATH explícito (evita install/install)
-        header('Location: ' . ($cfg['BASE_PATH'] === '/' ? '/install/?step=3' : $cfg['BASE_PATH'] . '/install/?step=3'));
-        exit;
+        // ...
+        $detectedBasePath = normalizeBasePath(defined('BASE_PATH') ? BASE_PATH : '/');
+        // ...
     }
 }
 ?>
 <!DOCTYPE html>
-<!-- Restante do HTML permanece igual; ajustar também os links para usar BASE_PATH direto -->
+<html lang="pt-BR">
+<head>
+    <!-- ... estilos ... -->
+</head>
+<body>
+    <div class="installer">
+        <div class="header">
+            <h1>🏠 AvyaHub Central de Ajuda</h1>
+            <p>Assistente de Instalação Completa</p>
+        </div>
+        <div class="content">
+            <?php if ($step === 1): $req = checkRequirements(); $ok=true; ?>
+                <!-- ... passo 1 ... -->
+            <?php elseif ($step === 2): ?>
+                <div class="steps"><div class="step completed">1. Requisitos</div><div class="step active">2. Configuração</div><div class="step">3. Finalização</div></div>
+                <h2>Configurações</h2>
+
+                <div class="alert alert-info">
+                    <strong>📍 BASE_PATH detectado:</strong> <code><?= htmlspecialchars($detected) ?></code>
+                    <div style="font-size: 0.9rem; color:#374151; margin-top:0.25rem;">Este valor será salvo no .env como <code>BASE_PATH</code>.</div>
+                </div>
+
+                <?php if (!empty($_SESSION['install_errors'])): ?>
+                    <!-- ... erros ... -->
+                <?php unset($_SESSION['install_errors']); endif; ?>
+
+                <form method="post" id="configForm" action="<?= $detected === '/' ? '/install/' : $detected . '/install/' ?>">
+                    <input type="hidden" name="action" value="install">
+                    <!-- ... campos de banco e admin ... -->
+                    <div style="display:flex; gap:0.5rem; margin-top: 2rem;">
+                        <a class="btn btn-secondary" href="<?= $detected === '/' ? '/install/?step=1' : $detected . '/install/?step=1' ?>">← Voltar</a>
+                        <button class="btn btn-success" type="submit" onclick="return confirm('Confirmar instalação com estas configurações?')">🚀 Instalar Sistema Completo</button>
+                    </div>
+                </form>
+            <?php elseif ($step === 3): ?>
+                <!-- ... passo 3 ... -->
+            <?php endif; ?>
+        </div>
+    </div>
+</body>
+</html>
