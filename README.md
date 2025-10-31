@@ -41,9 +41,23 @@ Sistema completo de central de ajuda inspirado no GitBook, desenvolvido especifi
 - PHP 7.4+
 - MySQL 5.7+ / MariaDB 10.3+
 - Apache com mod_rewrite
-- Extensões PHP: PDO, GD, JSON
+- Extensões PHP: PDO, GD, JSON, mbstring
 
-## 🛠️ Instalação
+## 🛠️ Instalação (Instalador Web Recomendado)
+
+1. Suba os arquivos do projeto no seu servidor.
+2. Acesse: `https://seudominio.com/install/`
+3. Siga o assistente em 3 etapas:
+   - Requisitos do ambiente
+   - Configuração (.env + banco)
+   - Finalização (flag de instalação)
+4. Acesse:
+   - Frontend: `https://seudominio.com`
+   - Admin: `https://seudominio.com/admin`
+
+> Importante: Após concluir, remova a pasta `/install` do servidor por segurança.
+
+## 🛠️ Instalação Manual (Alternativa)
 
 1. **Clone o repositório:**
    ```bash
@@ -75,9 +89,9 @@ Sistema completo de central de ajuda inspirado no GitBook, desenvolvido especifi
    ```
 
 3. **Configure o banco de dados:**
-   - Crie um banco MySQL
-   - As tabelas serão criadas automaticamente no primeiro acesso
-   - Ou execute manualmente: `install/install.sql`
+   ```bash
+   mysql -u root -p < install/install.sql
+   ```
 
 4. **Configure o Apache:**
    - Certifique-se que o mod_rewrite está ativado
@@ -89,10 +103,6 @@ Sistema completo de central de ajuda inspirado no GitBook, desenvolvido especifi
    chmod 755 uploads/
    chmod 755 assets/
    ```
-
-6. **Acesse o sistema:**
-   - Frontend: `http://seudominio.com`
-   - Admin: `http://seudominio.com/admin`
 
 ## 🔐 Acesso Administrativo
 
@@ -135,6 +145,15 @@ Acesse `/admin/settings` para personalizar:
 3. **Backup:** Configure backup automático do banco
 4. **Monitoramento:** Logs de acesso e erro
 5. **Atualizações:** Mantenha PHP e MySQL atualizados
+
+## 🧪 Verificação de Integridade (opcional)
+
+Após a instalação, você pode checar rapidamente o ambiente:
+- Escrita em `uploads/` e `assets/`
+- Conexão com o banco e latência
+- Presença do arquivo `.env` e da flag `install/.installed`
+
+Se quiser, podemos adicionar uma rota protegida para executar esses checks sob demanda.
 
 ---
 
