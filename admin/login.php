@@ -1,52 +1,75 @@
-<!DOCTYPE html>
+<?php
+require_once __DIR__ . '/../config.php';
+session_start();
+
+function csrf_token() {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+function check_csrf($token) {
+    return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
+$error = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !check_csrf($_POST['csrf_token'])) {
+        $error = 'Falha de validação CSRF';
+    } else {
+        $user = $_POST['username'] ?? '';
+        $pass = $_POST['password'] ?? '';
+        if ($user === '' || $pass === '') {
+            $error = 'Usuário ou senha inválidos';
+        } else {
+            try {
+                $pdo = createDatabaseConnection();
+                $stmt = $pdo->prepare('SELECT * FROM users WHERE username = ? AND is_active = 1 LIMIT 1');
+                $stmt->execute([$user]);
+                $row = $stmt->fetch();
+                if (!$row || !password_verify($pass, $row['password_hash'])) {
+                    $error = 'Usuário ou senha inválidos';
+                } else {
+                    session_regenerate_id(true);
+                    $_SESSION['user_id'] = $row['id'];
+                    $_SESSION['username'] = $row['username'];
+                    unset($_SESSION['csrf_token']);
+                    header('Location: ' . BASE_PATH . '/admin');
+                    exit;
+                }
+            } catch (Exception $e) {
+                $error = 'Erro ao conectar ao banco';
+            }
+        }
+    }
+}
+?><!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Admin AvyaHub</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-        .login-container { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-        .login-header { text-align: center; margin-bottom: 2rem; }
-        .login-title { font-size: 1.5rem; font-weight: bold; color: #333; margin-bottom: 0.5rem; }
-        .login-subtitle { color: #666; font-size: 0.9rem; }
-        .form-group { margin-bottom: 1.5rem; }
-        .form-label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: #333; }
-        .form-input { width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; transition: border-color 0.3s; }
-        .form-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
-        .login-btn { width: 100%; padding: 0.75rem; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 500; cursor: pointer; transition: background-color 0.3s; }
-        .login-btn:hover { background: #1d4ed8; }
-        .error-message { background: #fee2e2; color: #dc2626; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; }
-        .logo { width: 60px; height: 60px; background: #2563eb; border-radius: 12px; margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.5rem; }
-    </style>
+    <title>Painel Administrativo</title>
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/site.css">
+    <style>body{background:linear-gradient(135deg,#8093f1 0%,#a3cef1 100%);}</style>
 </head>
 <body>
-    <div class="login-container">
-        <div class="login-header">
-            <div class="logo">AH</div>
-            <h1 class="login-title">Painel Administrativo</h1>
-            <p class="login-subtitle">Central de Ajuda AvyaHub</p>
-        </div>
-        
-        <?php if (isset($login_error)): ?>
-        <div class="error-message">
-            <?= htmlspecialchars($login_error) ?>
-        </div>
-        <?php endif; ?>
-        
-        <form method="POST">
-            <div class="form-group">
-                <label class="form-label" for="username">Usuário</label>
-                <input type="text" id="username" name="username" class="form-input" required autocomplete="username">
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+        <form method="post" style="background:white;max-width:360px;width:100%;padding:2.5rem 1.5rem;border-radius:16px;box-shadow:0 6px 32px 0 #2222a052;display:flex;flex-direction:column;gap:1.5rem;align-items:center;">
+            <div style="margin-bottom:1rem;text-align:center;">
+                <div style="font-size:2.4rem;font-weight:700;margin-bottom:.3rem;background:#2563eb;width:64px;height:64px;border-radius:12px;color:white;display:flex;align-items:center;justify-content:center;">AH</div>
+                <h2 style="margin:0;font-weight:700;">Painel Administrativo</h2>
+                <span style="color:#666;font-size:.94rem">Central de Ajuda AvyaHub</span>
             </div>
-            
-            <div class="form-group">
-                <label class="form-label" for="password">Senha</label>
-                <input type="password" id="password" name="password" class="form-input" required autocomplete="current-password">
+            <?php if ($error): ?>
+                <div style="background:#fee2e2;color:#c53030;padding:.8rem 1rem;border-radius:8px;text-align:center;font-size:.98rem;"> <?= htmlspecialchars($error) ?> </div>
+            <?php endif; ?>
+            <div style="width:100%">
+                <input style="width:100%" required name="username" autocomplete="username" placeholder="Usuário" class="form-input">
             </div>
-            
-            <button type="submit" class="login-btn">Entrar</button>
+            <div style="width:100%">
+                <input style="width:100%" required type="password" name="password" autocomplete="current-password" placeholder="Senha" class="form-input">
+            </div>
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
+            <button type="submit" class="btn btn-primary" style="width:100%;font-size:1.1rem;padding:.7rem 0;">Entrar</button>
         </form>
     </div>
 </body>
