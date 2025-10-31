@@ -1,25 +1,31 @@
 <?php
 /**
  * Configurações gerais do sistema AvyaHub Central de Ajuda
- * Agora com suporte a variáveis de ambiente
+ * Loader .env robusto, headers de segurança e helpers
  */
 
-// Função para carregar variáveis de ambiente do arquivo .env
+// Loader .env robusto
 function loadEnvFile($path = '.env') {
-    if (!file_exists($path)) {
-        return false;
-    }
-    
+    if (!file_exists($path)) { return false; }
     $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
-        if (strpos(trim($line), '#') === 0) {
-            continue; // Ignorar comentários
-        }
-        
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#') { continue; }
+        if (strpos($line, '=') === false) { continue; }
         list($name, $value) = explode('=', $line, 2);
         $name = trim($name);
         $value = trim($value);
-        
+        // Remover aspas simples/duplas
+        if ((str_starts_with($value, '"') && str_ends_with($value, '"')) || (str_starts_with($value, "'") && str_ends_with($value, "'"))) {
+            $value = substr($value, 1, -1);
+        }
+        // Conversões comuns
+        $lower = strtolower($value);
+        if ($lower === 'true') { $value = true; }
+        elseif ($lower === 'false') { $value = false; }
+        elseif ($lower === 'null') { $value = null; }
+        elseif ($lower === 'empty') { $value = ''; }
+        elseif (is_numeric($value)) { $value = $value + 0; }
         if (!array_key_exists($name, $_SERVER) && !array_key_exists($name, $_ENV)) {
             putenv(sprintf('%s=%s', $name, $value));
             $_ENV[$name] = $value;
@@ -32,19 +38,10 @@ function loadEnvFile($path = '.env') {
 // Carregar arquivo .env
 loadEnvFile(__DIR__ . '/.env');
 
-// Função helper para obter variáveis de ambiente com fallback
+// Helper env
 function env($key, $default = null) {
     $value = getenv($key);
-    if ($value === false) {
-        return $default;
-    }
-    
-    // Converter strings boolean
-    if (strtolower($value) === 'true') return true;
-    if (strtolower($value) === 'false') return false;
-    if (strtolower($value) === 'null') return null;
-    
-    return $value;
+    return ($value === false) ? $default : $value;
 }
 
 // Configurações do banco de dados
@@ -59,23 +56,23 @@ define('ADMIN_URL', '/admin');
 define('UPLOADS_DIR', env('UPLOADS_DIR', 'uploads/'));
 define('MAX_UPLOAD_SIZE', env('MAX_UPLOAD_SIZE', 5 * 1024 * 1024)); // 5MB
 
-// Configurações de segurança
-define('ADMIN_USERNAME', env('ADMIN_USERNAME', 'avyahub'));
-define('ADMIN_PASSWORD', env('ADMIN_PASSWORD', 'Avh#2025'));
+// Segurança
 define('APP_SECRET_KEY', env('APP_SECRET_KEY', 'change_this_secret_key'));
 
-// Configurações de ambiente
+// Ambiente
 define('APP_ENV', env('APP_ENV', 'development'));
 define('APP_DEBUG', env('APP_DEBUG', true));
 
-// Configurações de performance
+// Performance
 define('ENABLE_CACHE', env('ENABLE_CACHE', true));
-define('CACHE_DURATION', env('CACHE_DURATION', 3600)); // 1 hora
+define('CACHE_DURATION', env('CACHE_DURATION', 3600));
 
-// Timezone
-date_default_timezone_set(env('APP_TIMEZONE', 'America/Sao_Paulo'));
+// Timezone com validação
+$tz = env('APP_TIMEZONE', 'America/Sao_Paulo');
+if (!in_array($tz, timezone_identifiers_list())) { $tz = 'America/Sao_Paulo'; }
+date_default_timezone_set($tz);
 
-// Configurações de erro baseadas no ambiente
+// Erros por ambiente
 if (APP_ENV === 'production') {
     ini_set('display_errors', 0);
     ini_set('display_startup_errors', 0);
@@ -86,9 +83,32 @@ if (APP_ENV === 'production') {
     error_reporting(E_ALL);
 }
 
-// Configurações de sessão mais seguras
+// Sessão mais segura
 ini_set('session.cookie_httponly', 1);
 ini_set('session.use_only_cookies', 1);
-ini_set('session.cookie_secure', isset($_SERVER['HTTPS']));
+ini_set('session.cookie_secure', (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'));
 
-?>
+// Headers de segurança em produção
+if (APP_ENV === 'production') {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('X-XSS-Protection: 1; mode=block');
+    header('Referrer-Policy: no-referrer');
+}
+
+// Helper PDO
+function createDatabaseConnection() {
+    if (!defined('DB_HOST') || !defined('DB_NAME') || !defined('DB_USER')) {
+        throw new RuntimeException('Configuração de banco incompleta');
+    }
+    return new PDO(
+        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+        DB_USER,
+        defined('DB_PASS') ? DB_PASS : '',
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false
+        ]
+    );
+}
