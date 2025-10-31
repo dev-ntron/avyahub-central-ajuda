@@ -76,12 +76,13 @@ $settings = getSiteSettings($pdo);
                 </div>
             </div>
             <nav class="admin-nav">
-                <a href="/admin" class="admin-nav-item <?= ($_SERVER['REQUEST_URI'] === '/admin' || $_SERVER['REQUEST_URI'] === '/admin/dashboard') ? 'active' : '' ?>">📊 Dashboard</a>
-                <a href="/admin/categories" class="admin-nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/categories') === 0 ? 'active' : '' ?>">📁 Categorias</a>
-                <a href="/admin/articles" class="admin-nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/articles') === 0 ? 'active' : '' ?>">📝 Artigos</a>
-                <a href="/admin/media" class="admin-nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/media') === 0 ? 'active' : '' ?>">🖼️ Mídia</a>
-                <a href="/admin/settings" class="admin-nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/settings') === 0 ? 'active' : '' ?>">⚙️ Configurações</a>
-                <a href="/admin/logout" class="admin-nav-item">🚪 Sair</a>
+                <a href="<?= url('/admin') ?>" class="admin-nav-item <?= ($_SERVER['REQUEST_URI'] === BASE_PATH . '/admin' || $_SERVER['REQUEST_URI'] === BASE_PATH . '/admin/' || $_SERVER['REQUEST_URI'] === BASE_PATH . '/admin/dashboard' || $_SERVER['REQUEST_URI'] === BASE_PATH . '/admin/dashboard.php') ? 'active' : '' ?>">📊 Dashboard</a>
+                <a href="<?= url('/admin/categories') ?>" class="admin-nav-item <?= strpos($_SERVER['REQUEST_URI'], BASE_PATH . '/admin/categories') === 0 ? 'active' : '' ?>">📁 Categorias</a>
+                <a href="<?= url('/admin/articles') ?>" class="admin-nav-item <?= strpos($_SERVER['REQUEST_URI'], BASE_PATH . '/admin/articles') === 0 ? 'active' : '' ?>">📝 Artigos</a>
+                <a href="<?= url('/admin/media') ?>" class="admin-nav-item <?= strpos($_SERVER['REQUEST_URI'], BASE_PATH . '/admin/media') === 0 ? 'active' : '' ?>">🖼️ Mídia</a>
+                <a href="<?= url('/admin/settings') ?>" class="admin-nav-item <?= strpos($_SERVER['REQUEST_URI'], BASE_PATH . '/admin/settings') === 0 ? 'active' : '' ?>">⚙️ Configurações</a>
+                <a href="<?= url('/admin/check') ?>" class="admin-nav-item <?= strpos($_SERVER['REQUEST_URI'], BASE_PATH . '/admin/check') === 0 ? 'active' : '' ?>">🔍 Verificações</a>
+                <a href="<?= url('/admin?action=logout') ?>" class="admin-nav-item">🚪 Sair</a>
             </nav>
         </aside>
         <main class="admin-main">
@@ -89,7 +90,7 @@ $settings = getSiteSettings($pdo);
                 <h1 class="admin-title"><?= $page_title ?? 'Dashboard' ?></h1>
                 <div class="admin-user">
                     <span>Olá, <?= htmlspecialchars($_SESSION['admin_username'] ?? 'Admin') ?></span>
-                    <a href="/admin/logout" class="logout-btn">Sair</a>
+                    <a href="<?= url('/admin?action=logout') ?>" class="logout-btn">Sair</a>
                 </div>
             </div>
             <?php if (isset($_SESSION['success'])): ?>
@@ -108,7 +109,7 @@ $settings = getSiteSettings($pdo);
                 plugins: ['advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview', 'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen', 'insertdatetime', 'media', 'table', 'help', 'wordcount', 'codesample'],
                 toolbar: 'undo redo | blocks | bold italic backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | removeformat | help | code | codesample | link image media | table',
                 content_style: 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 14px }',
-                paste_data_images: true, automatic_uploads: true, file_picker_types: 'image', images_upload_url: '/admin/upload.php',
+                paste_data_images: true, automatic_uploads: true, file_picker_types: 'image', images_upload_url: '<?= url('/admin/upload') ?>',
                 setup: function (editor) { editor.on('change', function () { editor.save(); }); }
             });
         }
