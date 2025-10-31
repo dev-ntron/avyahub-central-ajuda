@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 new PDO("mysql:host=$host;dbname=$name;charset=utf8mb4", $user, $pass);
                 $response = ['success' => true, 'message' => 'Conexão perfeita! Database existe e está acessível.'];
             } else {
-                try { $pdo->exec("CREATE DATABASE IF NOT EXISTS `$name`"); $pdo->exec("DROP DATABASE `$name`"); $response = ['success' => true, 'message' => 'Conexão OK. Database será criado automaticamente na instalação.']; } catch (Exception $e) { $response = ['success' => true, 'message' => 'Conexão OK, mas sem permissão CREATE DATABASE. Crie manualmente o database: ' . htmlspecialchars($name)]; }
+                try { $pdo->exec("CREATE DATABASE IF NOT EXISTS `$name`\n  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"); $pdo->exec("DROP DATABASE `$name`"); $response = ['success' => true, 'message' => 'Conexão OK. Database será criado automaticamente na instalação.']; } catch (Exception $e) { $response = ['success' => true, 'message' => 'Conexão OK, mas sem permissão CREATE DATABASE. Crie manualmente o database: ' . htmlspecialchars($name)]; }
             }
         } catch (Exception $e) { $response['message'] = 'Erro de conexão: ' . $e->getMessage(); }
         header('Content-Type: application/json'); echo json_encode($response); exit;
@@ -100,15 +100,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $pdo = new PDO("mysql:host={$cfg['DB_HOST']};charset=utf8mb4", $cfg['DB_USER'], $cfg['DB_PASS']);
                 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-                if (isset($_POST['create_database'])) { $pdo->exec("CREATE DATABASE IF NOT EXISTS `{$cfg['DB_NAME']}`"); }
+                if (isset($_POST['create_database'])) { $pdo->exec("CREATE DATABASE IF NOT EXISTS `{$cfg['DB_NAME']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"); }
                 $pdo = new PDO("mysql:host={$cfg['DB_HOST']};dbname={$cfg['DB_NAME']};charset=utf8mb4", $cfg['DB_USER'], $cfg['DB_PASS']);
                 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-                $env = "DB_HOST={$cfg['DB_HOST']}\nDB_NAME={$cfg['DB_NAME']}\nDB_USER={$cfg['DB_USER']}\nDB_PASS={$cfg['DB_PASS']}\n\nADMIN_USERNAME={$cfg['ADMIN_USERNAME']}\nADMIN_PASSWORD={$cfg['ADMIN_PASSWORD']}\n\nSITE_URL=/\nUPLOADS_DIR=uploads/\nMAX_UPLOAD_SIZE=5242880\nAPP_ENV={$cfg['APP_ENV']}\nAPP_DEBUG={$cfg['APP_DEBUG']}\nAPP_TIMEZONE=America/Sao_Paulo\nENABLE_CACHE=true\nCACHE_DURATION=3600\nAPP_SECRET_KEY={$cfg['APP_SECRET_KEY']}\n";
+
+                // 1) Criar tabelas
+                require_once __DIR__ . '/database.php';
+                require_once __DIR__ . '/migrations_auth.php';
+                createTables($pdo);
+                addAuthTables($pdo);
+
+                // 2) Criar .env sem ADMIN_ (somente DB + app)
+                $env = "DB_HOST={$cfg['DB_HOST']}\nDB_NAME={$cfg['DB_NAME']}\nDB_USER={$cfg['DB_USER']}\nDB_PASS={$cfg['DB_PASS']}\n\nSITE_URL=/\nUPLOADS_DIR=uploads/\nMAX_UPLOAD_SIZE=5242880\nAPP_ENV={$cfg['APP_ENV']}\nAPP_DEBUG={$cfg['APP_DEBUG']}\nAPP_TIMEZONE=America/Sao_Paulo\nENABLE_CACHE=true\nCACHE_DURATION=3600\nAPP_SECRET_KEY={$cfg['APP_SECRET_KEY']}\n";
                 if (!file_put_contents(__DIR__ . '/../.env', $env)) { throw new Exception('Não foi possível criar .env (permissões)'); }
                 @chmod(__DIR__ . '/../.env', 0640);
-                require_once __DIR__ . '/database.php';
-                createTables($pdo);
+
+                // 3) Criar usuário admin na tabela users
+                $hash = password_hash($cfg['ADMIN_PASSWORD'], PASSWORD_BCRYPT);
+                $stmt = $pdo->prepare('INSERT INTO users (name, username, password_hash, role, is_active) VALUES (?, ?, ?, ?, 1)');
+                $stmt->execute(['Administrador', $cfg['ADMIN_USERNAME'], $hash, 'admin']);
+
+                // 4) Flag de instalação
                 file_put_contents($installed_file, date('Y-m-d H:i:s'));
+                
                 header('Location: /install/?step=3'); exit;
             } catch (Exception $e) { $errors[] = $e->getMessage(); }
         }
