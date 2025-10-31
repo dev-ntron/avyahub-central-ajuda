@@ -35,6 +35,7 @@ if (file_exists($installed_file)) {
 }
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/database.php'; // garante createTables() e runCompleteMigrations()
 
 function checkRequirements() {
     $checks = [];
@@ -54,96 +55,6 @@ function checkRequirements() {
 }
 
 function generateSecretKey() { return bin2hex(random_bytes(32)); }
-
-// Função para executar todas as migrations
-function runCompleteMigrations(PDO $pdo) {
-    // 1. Criar tabelas básicas
-    require_once __DIR__ . '/database.php';
-    createTables($pdo);
-    
-    // 2. Tabelas de autenticação e segurança
-    $pdo->exec("CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(150) UNIQUE,
-        username VARCHAR(60) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        role ENUM('admin','editor') DEFAULT 'admin',
-        is_active TINYINT(1) DEFAULT 1,
-        last_login_at DATETIME NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_username (username),
-        INDEX idx_role (role)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    $pdo->exec("CREATE TABLE IF NOT EXISTS login_attempts (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        ip VARCHAR(45) NOT NULL,
-        username VARCHAR(60) NOT NULL,
-        attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_ip (ip),
-        INDEX idx_user (username),
-        INDEX idx_time (attempted_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    $pdo->exec("CREATE TABLE IF NOT EXISTS audit_log (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NULL,
-        action VARCHAR(50) NOT NULL,
-        entity VARCHAR(50) NULL,
-        entity_id INT NULL,
-        details TEXT NULL,
-        ip_address VARCHAR(45) NULL,
-        user_agent TEXT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-        INDEX idx_action (action),
-        INDEX idx_user (user_id),
-        INDEX idx_time (created_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // 3. Tabela de arquivos de mídia
-    $pdo->exec("CREATE TABLE IF NOT EXISTS media_files (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        filename VARCHAR(255) NOT NULL,
-        original_name VARCHAR(255) NOT NULL,
-        file_path VARCHAR(500) NOT NULL,
-        file_url VARCHAR(500) NOT NULL,
-        mime_type VARCHAR(100) NOT NULL,
-        file_size INT NOT NULL,
-        width INT NULL,
-        height INT NULL,
-        alt_text VARCHAR(255) NULL,
-        uploaded_by INT NULL,
-        is_active TINYINT(1) DEFAULT 1,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL,
-        INDEX idx_filename (filename),
-        INDEX idx_mime (mime_type),
-        INDEX idx_active (is_active)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // 4. Configurações avançadas do sistema
-    $advancedSettings = [
-        'enable_registration' => '0',
-        'maintenance_mode' => '0',
-        'max_upload_size' => '5242880', // 5MB
-        'allowed_file_types' => 'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx',
-        'session_timeout' => '7200', // 2 horas
-        'enable_audit_log' => '1',
-        'max_login_attempts' => '10',
-        'login_attempt_window' => '600' // 10 minutos
-    ];
-    
-    foreach ($advancedSettings as $key => $value) {
-        $stmt = $pdo->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
-        $stmt->execute([$key, $value, $value]);
-    }
-    
-    return true;
-}
 
 session_start();
 $step = isset($_GET['step']) ? (int)$_GET['step'] : 1;
@@ -203,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (isset($_POST['create_database'])) { $pdo->exec("CREATE DATABASE IF NOT EXISTS `{$cfg['DB_NAME']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"); }
                 $pdo = new PDO("mysql:host={$cfg['DB_HOST']};dbname={$cfg['DB_NAME']};charset=utf8mb4", $cfg['DB_USER'], $cfg['DB_PASS'], [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
 
-                // Executar todas as migrations de uma vez
+                // Executar todas as migrations de uma vez (definida em database.php)
                 runCompleteMigrations($pdo);
 
                 // Criar .env (inclui BASE_PATH detectado, com fallback para '/')
