@@ -1,2 +1,0 @@
-Este é apenas um arquivo de teste.
-Pode apagar após os testes!
