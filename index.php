@@ -14,13 +14,11 @@ if (!file_exists($env_path) || !file_exists($install_flag)) {
 if (file_exists($env_path)) {
     require_once 'config.php';
     try {
-        $pdo = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4", DB_USER, DB_PASS, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false
-        ]);
-    } catch(PDOException $e) {
+        // Usa helper centralizado
+        $pdo = createDatabaseConnection();
+    } catch(Throwable $e) {
         if (defined('APP_DEBUG') && APP_DEBUG) {
+            error_log('[DB-ERROR] ' . $e->getMessage());
             echo "<div style='background: #fee2e2; border: 1px solid #f87171; padding: 1rem; border-radius: 8px; margin: 2rem; font-family: monospace;'>";
             echo "<h3 style='color: #dc2626; margin: 0 0 1rem 0;'>❌ Erro de Conexão com o Banco</h3>";
             echo "<p style='margin: 0 0 1rem 0; color: #7f1d1d;'>Detalhes: " . htmlspecialchars($e->getMessage()) . "</p>";
@@ -39,9 +37,12 @@ $path = rtrim($path, '/');
 
 if ($path === '/install' || strpos($path, '/install') === 0) {
     include 'install/index.php';
-} elseif ($path === '/admin' || strpos($path, '/admin') === 0) {
-    include 'admin/index.php';
-} else {
-    include 'public/index.php';
+    exit;
 }
+if ($path === '/admin' || strpos($path, '/admin') === 0) {
+    include 'admin/index.php';
+    exit;
+}
+include 'public/index.php';
+exit;
 ?>
