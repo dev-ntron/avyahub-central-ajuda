@@ -1,24 +1,41 @@
 <?php
 $page_title = 'Dashboard';
 
+// Usar createDatabaseConnection() se não existir $pdo
+if (!isset($pdo)) {
+    try {
+        $pdo = createDatabaseConnection();
+    } catch (Exception $e) {
+        $_SESSION['error'] = 'Erro de conexão com banco de dados';
+        $stats = ['categories' => 0, 'articles' => 0, 'published' => 0];
+        $recent_articles = [];
+    }
+}
+
 // Obter estatísticas
 $stats = [];
 
-// Total de categorias
-$stmt = $pdo->query("SELECT COUNT(*) FROM categories");
-$stats['categories'] = $stmt->fetchColumn();
-
-// Total de artigos
-$stmt = $pdo->query("SELECT COUNT(*) FROM articles");
-$stats['articles'] = $stmt->fetchColumn();
-
-// Artigos publicados
-$stmt = $pdo->query("SELECT COUNT(*) FROM articles WHERE is_published = 1");
-$stats['published'] = $stmt->fetchColumn();
-
-// Artigos recentes
-$stmt = $pdo->query("SELECT a.*, c.name as category_name FROM articles a JOIN categories c ON a.category_id = c.id ORDER BY a.created_at DESC LIMIT 5");
-$recent_articles = $stmt->fetchAll();
+try {
+    // Total de categorias
+    $stmt = $pdo->query("SELECT COUNT(*) FROM categories");
+    $stats['categories'] = $stmt->fetchColumn();
+    
+    // Total de artigos
+    $stmt = $pdo->query("SELECT COUNT(*) FROM articles");
+    $stats['articles'] = $stmt->fetchColumn();
+    
+    // Artigos publicados
+    $stmt = $pdo->query("SELECT COUNT(*) FROM articles WHERE is_published = 1");
+    $stats['published'] = $stmt->fetchColumn();
+    
+    // Artigos recentes
+    $stmt = $pdo->query("SELECT a.*, c.name as category_name FROM articles a LEFT JOIN categories c ON a.category_id = c.id ORDER BY a.created_at DESC LIMIT 5");
+    $recent_articles = $stmt->fetchAll();
+} catch (Exception $e) {
+    $stats = ['categories' => 0, 'articles' => 0, 'published' => 0];
+    $recent_articles = [];
+    $_SESSION['error'] = 'Erro ao obter estatísticas do dashboard';
+}
 
 ob_start();
 ?>
@@ -58,7 +75,7 @@ ob_start();
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
         <h2 style="font-size: 1.2rem; font-weight: 600; color: #2d3748;">Artigos Recentes</h2>
-        <a href="/admin/articles" class="btn btn-sm">Ver Todos</a>
+        <a href="<?= url('/admin/articles') ?>" class="btn btn-sm">Ver Todos</a>
     </div>
     
     <?php if ($recent_articles): ?>
@@ -84,7 +101,7 @@ ob_start();
                         </div>
                         <?php endif; ?>
                     </td>
-                    <td><?= htmlspecialchars($article['category_name']) ?></td>
+                    <td><?= htmlspecialchars($article['category_name'] ?? 'Sem categoria') ?></td>
                     <td>
                         <span style="padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; 
                               background: <?= $article['is_published'] ? '#f0fff4; color: #2f855a' : '#fed7d7; color: #c53030' ?>;">
@@ -94,8 +111,8 @@ ob_start();
                     <td><?= date('d/m/Y', strtotime($article['created_at'])) ?></td>
                     <td>
                         <div style="display: flex; gap: 0.5rem;">
-                            <a href="/<?= $article['slug'] ?>" class="btn btn-sm" style="background: #38a169;" target="_blank">Ver</a>
-                            <a href="/admin/articles?edit=<?= $article['id'] ?>" class="btn btn-sm">Editar</a>
+                            <a href="<?= url('/' . $article['slug']) ?>" class="btn btn-sm" style="background: #38a169;" target="_blank">Ver</a>
+                            <a href="<?= url('/admin/articles?edit=' . $article['id']) ?>" class="btn btn-sm">Editar</a>
                         </div>
                     </td>
                 </tr>
@@ -106,7 +123,7 @@ ob_start();
     <?php else: ?>
     <div class="text-center" style="padding: 2rem; color: #718096;">
         <div style="font-size: 3rem; margin-bottom: 1rem;">📝</div>
-        <p>Nenhum artigo encontrado. <a href="/admin/articles" style="color: #3182ce;">Criar primeiro artigo</a></p>
+        <p>Nenhum artigo encontrado. <a href="<?= url('/admin/articles') ?>" style="color: #3182ce;">Criar primeiro artigo</a></p>
     </div>
     <?php endif; ?>
 </div>
@@ -114,11 +131,12 @@ ob_start();
 <div class="card">
     <h2 style="font-size: 1.2rem; font-weight: 600; color: #2d3748; margin-bottom: 1rem;">Ações Rápidas</h2>
     <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
-        <a href="/admin/articles?new=1" class="btn btn-success">➕ Novo Artigo</a>
-        <a href="/admin/categories?new=1" class="btn btn-success">📁 Nova Categoria</a>
-        <a href="/admin/media" class="btn">🖼️ Gerenciar Mídia</a>
-        <a href="/admin/settings" class="btn">⚙️ Configurações</a>
-        <a href="/" class="btn" target="_blank">🌍 Ver Site</a>
+        <a href="<?= url('/admin/articles?new=1') ?>" class="btn btn-success">➕ Novo Artigo</a>
+        <a href="<?= url('/admin/categories?new=1') ?>" class="btn btn-success">📁 Nova Categoria</a>
+        <a href="<?= url('/admin/media') ?>" class="btn">🖼️ Gerenciar Mídia</a>
+        <a href="<?= url('/admin/settings') ?>" class="btn">⚙️ Configurações</a>
+        <a href="<?= url('/admin/check') ?>" class="btn">🔍 Verificações</a>
+        <a href="<?= url('/') ?>" class="btn" target="_blank">🌍 Ver Site</a>
     </div>
 </div>
 
