@@ -1,80 +1,139 @@
 <?php
 $page_title = 'Categorias';
 
+// Usar createDatabaseConnection() se não existir $pdo
+if (!isset($pdo)) {
+    try {
+        $pdo = createDatabaseConnection();
+    } catch (Exception $e) {
+        $_SESSION['error'] = 'Erro de conexão com banco de dados';
+        header('Location: ' . BASE_PATH . '/admin');
+        exit;
+    }
+}
+
+// CSRF helper functions (assumindo que estão no auth.php ou config.php)
+if (!function_exists('get_csrf_token')) {
+    function get_csrf_token() {
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return $_SESSION['csrf_token'];
+    }
+}
+if (!function_exists('verify_csrf_token')) {
+    function verify_csrf_token($token) {
+        return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+    }
+}
+
 // Processar ações
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Verificar CSRF token
+    $csrf_token = $_POST['csrf_token'] ?? '';
+    if (!verify_csrf_token($csrf_token)) {
+        $_SESSION['error'] = 'Token de segurança inválido';
+        header('Location: ' . BASE_PATH . '/admin/categories');
+        exit;
+    }
+    
     if (isset($_POST['action'])) {
-        switch ($_POST['action']) {
-            case 'create':
-                $name = trim($_POST['name']);
-                $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $_POST['name'])));
-                $description = trim($_POST['description']);
-                
-                $stmt = $pdo->prepare("INSERT INTO categories (name, slug, description) VALUES (?, ?, ?)");
-                if ($stmt->execute([$name, $slug, $description])) {
-                    $_SESSION['success'] = 'Categoria criada com sucesso!';
-                } else {
-                    $_SESSION['error'] = 'Erro ao criar categoria.';
-                }
-                break;
-                
-            case 'update':
-                $id = (int)$_POST['id'];
-                $name = trim($_POST['name']);
-                $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $_POST['slug'])));
-                $description = trim($_POST['description']);
-                
-                $stmt = $pdo->prepare("UPDATE categories SET name = ?, slug = ?, description = ? WHERE id = ?");
-                if ($stmt->execute([$name, $slug, $description, $id])) {
-                    $_SESSION['success'] = 'Categoria atualizada com sucesso!';
-                } else {
-                    $_SESSION['error'] = 'Erro ao atualizar categoria.';
-                }
-                break;
-                
-            case 'delete':
-                $id = (int)$_POST['id'];
-                
-                // Verificar se existem artigos nesta categoria
-                $stmt = $pdo->prepare("SELECT COUNT(*) FROM articles WHERE category_id = ?");
-                $stmt->execute([$id]);
-                $article_count = $stmt->fetchColumn();
-                
-                if ($article_count > 0) {
-                    $_SESSION['error'] = 'Não é possível excluir uma categoria que possui artigos.';
-                } else {
-                    $stmt = $pdo->prepare("DELETE FROM categories WHERE id = ?");
-                    if ($stmt->execute([$id])) {
-                        $_SESSION['success'] = 'Categoria excluída com sucesso!';
-                    } else {
-                        $_SESSION['error'] = 'Erro ao excluir categoria.';
+        try {
+            switch ($_POST['action']) {
+                case 'create':
+                    $name = trim($_POST['name']);
+                    $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $_POST['name'])));
+                    $description = trim($_POST['description']);
+                    
+                    if (empty($name)) {
+                        $_SESSION['error'] = 'Nome da categoria é obrigatório';
+                        break;
                     }
-                }
-                break;
+                    
+                    $stmt = $pdo->prepare("INSERT INTO categories (name, slug, description) VALUES (?, ?, ?)");
+                    if ($stmt->execute([$name, $slug, $description])) {
+                        $_SESSION['success'] = 'Categoria criada com sucesso!';
+                    } else {
+                        $_SESSION['error'] = 'Erro ao criar categoria.';
+                    }
+                    break;
+                    
+                case 'update':
+                    $id = (int)$_POST['id'];
+                    $name = trim($_POST['name']);
+                    $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $_POST['slug'])));
+                    $description = trim($_POST['description']);
+                    
+                    if (empty($name) || empty($slug)) {
+                        $_SESSION['error'] = 'Nome e slug são obrigatórios';
+                        break;
+                    }
+                    
+                    $stmt = $pdo->prepare("UPDATE categories SET name = ?, slug = ?, description = ? WHERE id = ?");
+                    if ($stmt->execute([$name, $slug, $description, $id])) {
+                        $_SESSION['success'] = 'Categoria atualizada com sucesso!';
+                    } else {
+                        $_SESSION['error'] = 'Erro ao atualizar categoria.';
+                    }
+                    break;
+                    
+                case 'delete':
+                    $id = (int)$_POST['id'];
+                    
+                    // Verificar se existem artigos nesta categoria
+                    $stmt = $pdo->prepare("SELECT COUNT(*) FROM articles WHERE category_id = ?");
+                    $stmt->execute([$id]);
+                    $article_count = $stmt->fetchColumn();
+                    
+                    if ($article_count > 0) {
+                        $_SESSION['error'] = 'Não é possível excluir uma categoria que possui artigos.';
+                    } else {
+                        $stmt = $pdo->prepare("DELETE FROM categories WHERE id = ?");
+                        if ($stmt->execute([$id])) {
+                            $_SESSION['success'] = 'Categoria excluída com sucesso!';
+                        } else {
+                            $_SESSION['error'] = 'Erro ao excluir categoria.';
+                        }
+                    }
+                    break;
+            }
+        } catch (Exception $e) {
+            $_SESSION['error'] = 'Erro interno: ' . $e->getMessage();
         }
         
-        header('Location: /admin/categories');
+        header('Location: ' . BASE_PATH . '/admin/categories');
         exit;
     }
 }
 
 // Obter categorias
-$stmt = $pdo->query("
-    SELECT c.*, COUNT(a.id) as article_count 
-    FROM categories c 
-    LEFT JOIN articles a ON c.id = a.category_id 
-    GROUP BY c.id 
-    ORDER BY c.order_position ASC, c.name ASC
-");
-$categories = $stmt->fetchAll();
+try {
+    $stmt = $pdo->query("
+        SELECT c.*, COUNT(a.id) as article_count 
+        FROM categories c 
+        LEFT JOIN articles a ON c.id = a.category_id 
+        GROUP BY c.id 
+        ORDER BY c.order_position ASC, c.name ASC
+    ");
+    $categories = $stmt->fetchAll();
+} catch (Exception $e) {
+    $categories = [];
+    $_SESSION['error'] = 'Erro ao obter categorias';
+}
 
 // Categoria para edição
 $edit_category = null;
 if (isset($_GET['edit'])) {
-    $stmt = $pdo->prepare("SELECT * FROM categories WHERE id = ?");
-    $stmt->execute([(int)$_GET['edit']]);
-    $edit_category = $stmt->fetch();
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM categories WHERE id = ?");
+        $stmt->execute([(int)$_GET['edit']]);
+        $edit_category = $stmt->fetch();
+    } catch (Exception $e) {
+        $_SESSION['error'] = 'Erro ao obter categoria para edição';
+    }
 }
+
+$csrf_token = get_csrf_token();
 
 ob_start();
 ?>
@@ -125,6 +184,7 @@ ob_start();
                             <button onclick="editCategory(<?= htmlspecialchars(json_encode($category)) ?>)" class="btn btn-sm">✏️</button>
                             <?php if ($category['article_count'] == 0): ?>
                             <form method="POST" style="display: inline;" onsubmit="return confirm('Tem certeza que deseja excluir esta categoria?')">
+                                <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="id" value="<?= $category['id'] ?>">
                                 <button type="submit" class="btn btn-sm btn-danger">🗑️</button>
@@ -156,6 +216,7 @@ ob_start();
         </div>
         
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
             <input type="hidden" name="action" value="create">
             
             <div class="form-group">
@@ -185,6 +246,7 @@ ob_start();
         </div>
         
         <form method="POST" id="editCategoryForm">
+            <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
             <input type="hidden" name="action" value="update">
             <input type="hidden" name="id" id="edit_id">
             
