@@ -4,17 +4,6 @@ session_start();
 
 require_once __DIR__ . '/../config.php';
 
-// Conexão DB
-try {
-    $pdo = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4", DB_USER, DB_PASS, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
-    ]);
-} catch (PDOException $e) {
-    $pdo = null;
-    $db_error = $e->getMessage();
-}
-
 // Verificar login admin atual (compatível com sessão existente)
 $admin_ok = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
 
@@ -22,6 +11,15 @@ if (!$admin_ok) {
     http_response_code(403);
     echo 'Acesso negado';
     exit;
+}
+
+// Usar createDatabaseConnection() helper
+$pdo = null;
+$db_error = null;
+try {
+    $pdo = createDatabaseConnection();
+} catch (Exception $e) {
+    $db_error = $e->getMessage();
 }
 
 $checks = [];
@@ -68,15 +66,21 @@ if ($pdo) {
         $db_version = $v ? $v['v'] : 'desconhecida';
         $pdo->query('SELECT 1')->fetch();
         $db_latency_ms = round((microtime(true) - $t0) * 1000, 2);
+        
         // Tabelas essenciais
         $need = ['categories','articles','site_settings','search_index'];
         $missing = [];
         foreach ($need as $t) {
             $st = $pdo->query("SHOW TABLES LIKE '".$t."'");
-            if ($st->rowCount() === 0) { $missing[] = $t; }
-            else {
-                $c = $pdo->query("SELECT COUNT(*) c FROM `".$t."`")->fetch();
-                $table_counts[$t] = (int)($c['c'] ?? 0);
+            if ($st->rowCount() === 0) { 
+                $missing[] = $t; 
+            } else {
+                try {
+                    $c = $pdo->query("SELECT COUNT(*) c FROM `".$t."`")->fetch();
+                    $table_counts[$t] = (int)($c['c'] ?? 0);
+                } catch (Exception $e) {
+                    $table_counts[$t] = 'erro';
+                }
             }
         }
         $tables_ok = count($missing) === 0;
@@ -103,15 +107,29 @@ foreach (['pdo_mysql','json','gd','mbstring'] as $ext) {
     ];
 }
 
+// 6) Configurações BASE_PATH
+$checks['base_path'] = [
+    'label' => 'BASE_PATH configurado',
+    'status' => defined('BASE_PATH'),
+    'details' => defined('BASE_PATH') ? BASE_PATH : 'indefinido'
+];
+$checks['base_url'] = [
+    'label' => 'BASE_URL configurado',
+    'status' => defined('BASE_URL'),
+    'details' => defined('BASE_URL') ? BASE_URL : 'indefinido'
+];
+
 // Render simples
-function badge($ok){ return $ok ? '<span style="color:#065f46;background:#ecfdf5;border:1px solid #10b981;padding:2px 6px;border-radius:6px;">OK</span>' : '<span style="color:#991b1b;background:#fef2f2;border:1px solid #ef4444;padding:2px 6px;border-radius:6px;">FALHA</span>'; }
+function badge($ok){ 
+    return $ok ? '<span style="color:#065f46;background:#ecfdf5;border:1px solid #10b981;padding:2px 6px;border-radius:6px;">OK</span>' : '<span style="color:#991b1b;background:#fef2f2;border:1px solid #ef4444;padding:2px 6px;border-radius:6px;">FALHA</span>'; 
+}
 ?>
 <!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Verificação de Integridade</title>
+<title>Verificação de Integridade - AvyaHub Admin</title>
 <style>
  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f8fafc;margin:0;padding:2rem;color:#1f2937}
  .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1.25rem;margin:0 auto 1rem;max-width:900px}
@@ -128,11 +146,11 @@ function badge($ok){ return $ok ? '<span style="color:#065f46;background:#ecfdf5
 </head>
 <body>
 <div class="card">
-  <h1>Verificação de Integridade</h1>
+  <h1>🔍 Verificação de Integridade</h1>
   <div class="subtitle">Cheque rápido do ambiente, permissões e banco de dados.</div>
   <div class="grid">
     <div class="card">
-      <h3 style="margin-top:0">Arquivos & Permissões</h3>
+      <h3 style="margin-top:0">🗋 Arquivos & Permissões</h3>
       <table>
         <tr><th>Item</th><th>Status</th><th>Detalhes</th></tr>
         <tr><td>.env existente</td><td><?= badge($checks['env_exists']['status']) ?></td><td class="muted"></td></tr>
@@ -143,7 +161,7 @@ function badge($ok){ return $ok ? '<span style="color:#065f46;background:#ecfdf5
       </table>
     </div>
     <div class="card">
-      <h3 style="margin-top:0">Banco de Dados</h3>
+      <h3 style="margin-top:0">💾 Banco de Dados</h3>
       <table>
         <tr><th>Item</th><th>Status</th><th>Detalhes</th></tr>
         <tr><td>Conexão</td><td><?= badge($pdo!==null) ?></td><td class="muted"><?= isset($db_error)? htmlspecialchars($db_error):'ok' ?></td></tr>
@@ -156,17 +174,17 @@ function badge($ok){ return $ok ? '<span style="color:#065f46;background:#ecfdf5
 </div>
 
 <div class="card">
-  <h3 style="margin-top:0">Contagem de Registros</h3>
+  <h3 style="margin-top:0">📊 Contagem de Registros</h3>
   <table>
     <tr><th>Tabela</th><th>Registros</th></tr>
     <?php foreach ($table_counts as $t=>$c): ?>
-    <tr><td><?= htmlspecialchars($t) ?></td><td><?= (int)$c ?></td></tr>
+    <tr><td><?= htmlspecialchars($t) ?></td><td><?= is_numeric($c) ? (int)$c : htmlspecialchars($c) ?></td></tr>
     <?php endforeach; ?>
   </table>
 </div>
 
 <div class="card">
-  <h3 style="margin-top:0">Ambiente</h3>
+  <h3 style="margin-top:0">⚙️ Ambiente PHP</h3>
   <table>
     <tr><th>Item</th><th>Status</th><th>Detalhes</th></tr>
     <tr><td>PHP >= 7.4</td><td><?= badge($checks['php_version']['status']) ?></td><td class="muted"><?= htmlspecialchars($checks['php_version']['details']) ?></td></tr>
@@ -176,9 +194,18 @@ function badge($ok){ return $ok ? '<span style="color:#065f46;background:#ecfdf5
   </table>
 </div>
 
+<div class="card">
+  <h3 style="margin-top:0">🔗 Configurações de URL</h3>
+  <table>
+    <tr><th>Item</th><th>Status</th><th>Detalhes</th></tr>
+    <tr><td>BASE_PATH</td><td><?= badge($checks['base_path']['status']) ?></td><td class="muted"><?= htmlspecialchars($checks['base_path']['details']) ?></td></tr>
+    <tr><td>BASE_URL</td><td><?= badge($checks['base_url']['status']) ?></td><td class="muted"><?= htmlspecialchars($checks['base_url']['details']) ?></td></tr>
+  </table>
+</div>
+
 <div class="card" style="text-align:center">
-  <a href="/admin/check.php" class="btn">Reexecutar Testes</a>
-  <a href="/admin" class="btn" style="background:#059669;margin-left:.5rem">Voltar ao Admin</a>
+  <a href="<?= url('/admin/check') ?>" class="btn">🔄 Reexecutar Testes</a>
+  <a href="<?= url('/admin') ?>" class="btn" style="background:#059669;margin-left:.5rem">← Voltar ao Admin</a>
 </div>
 </body>
 </html>
