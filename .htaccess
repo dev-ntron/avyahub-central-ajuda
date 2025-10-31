@@ -1,6 +1,7 @@
 RewriteEngine On
 
-# Se estiver em subpasta, ajuste aqui (ex.: /ajuda). Se raiz, deixe vazio
+# BASE_PATH dinâmico - ajustado automaticamente pelo instalador
+# Para subpasta: /ajuda, Para raiz: /
 RewriteBase /
 
 # Redirecionar para HTTPS (descomente se necessário)
@@ -8,45 +9,69 @@ RewriteBase /
 # RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
 # Permitir installer enquanto NÃO existir install/.installed
-RewriteCond %{REQUEST_URI} ^/install [NC]
+RewriteCond %{REQUEST_URI} install [NC]
 RewriteCond %{DOCUMENT_ROOT}/install/.installed !-f
 RewriteRule ^install/(.*)$ install/$1 [L]
 
-# Bloquear acesso ao installer DEPOIS que o arquivo .installed existir
-RewriteCond %{REQUEST_URI} ^/install [NC]
+# Bloquear acesso ao installer DEPOIS que o arquivo .installed existir  
+RewriteCond %{REQUEST_URI} install [NC]
 RewriteCond %{DOCUMENT_ROOT}/install/.installed -f
 RewriteRule ^install/ - [F,L]
 
-# Admin routes
-RewriteCond %{REQUEST_URI} ^/admin/?(.*)$ [NC]
+# Admin routes - suporte a BASE_PATH dinâmico
+RewriteCond %{REQUEST_URI} admin [NC]
 RewriteRule ^admin/?(.*)$ index.php [QSA,L]
 
-# API routes
-RewriteCond %{REQUEST_URI} ^/api/(.*)$ [NC]
+# API routes - suporte a BASE_PATH dinâmico 
+RewriteCond %{REQUEST_URI} api [NC]
 RewriteRule ^api/(.*)$ api/$1 [QSA,L]
 
-# Public routes - artigos
+# Public routes - artigos (suporte a BASE_PATH)
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{REQUEST_URI} !^/admin [NC]
-RewriteCond %{REQUEST_URI} !^/api [NC]
-RewriteCond %{REQUEST_URI} !^/install [NC]
+RewriteCond %{REQUEST_URI} !admin [NC]
+RewriteCond %{REQUEST_URI} !api [NC] 
+RewriteCond %{REQUEST_URI} !install [NC]
 RewriteRule ^([^/]+)/?$ index.php?path=$1 [QSA,L]
+
+# Categoria routes
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !admin [NC]
+RewriteCond %{REQUEST_URI} !api [NC]
+RewriteCond %{REQUEST_URI} !install [NC]
+RewriteRule ^categoria/([^/]+)/?$ index.php?category=$1 [QSA,L]
 
 # Bloquear acesso a arquivos sensíveis
 <FilesMatch "\.(inc|conf|config|env)$">
     Require all denied
 </FilesMatch>
 
+# Bloquear acesso à pasta install após instalação
+<IfModule mod_rewrite.c>
+    RewriteCond %{DOCUMENT_ROOT}/install/.installed -f
+    RewriteRule ^install/ - [F,L]
+</IfModule>
+
+# Segurança adicional
+<Files ".env">
+    Require all denied
+</Files>
+<Files "config.php">
+    Require all denied
+</Files>
+
 # Cache de assets
 <IfModule mod_expires.c>
     ExpiresActive On
     ExpiresByType text/css "access plus 1 month"
     ExpiresByType application/javascript "access plus 1 month"
-    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month" 
     ExpiresByType image/jpg "access plus 1 month"
     ExpiresByType image/jpeg "access plus 1 month"
     ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/webp "access plus 1 month"
+    ExpiresByType image/svg+xml "access plus 1 month"
 </IfModule>
 
 # Compressão GZIP
@@ -60,4 +85,12 @@ RewriteRule ^([^/]+)/?$ index.php?path=$1 [QSA,L]
     AddOutputFilterByType DEFLATE application/rss+xml
     AddOutputFilterByType DEFLATE application/javascript
     AddOutputFilterByType DEFLATE application/x-javascript
+</IfModule>
+
+# Segurança de headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
