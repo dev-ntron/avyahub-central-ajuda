@@ -1,111 +1,167 @@
 <?php
 $page_title = 'Mídia e Assets';
 
+// Usar createDatabaseConnection() se não existir $pdo
+if (!isset($pdo)) {
+    try {
+        $pdo = createDatabaseConnection();
+    } catch (Exception $e) {
+        $_SESSION['error'] = 'Erro de conexão com banco de dados';
+        header('Location: ' . BASE_PATH . '/admin');
+        exit;
+    }
+}
+
+// CSRF helper functions (assumindo que estão no auth.php ou config.php)
+if (!function_exists('get_csrf_token')) {
+    function get_csrf_token() {
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return $_SESSION['csrf_token'];
+    }
+}
+if (!function_exists('verify_csrf_token')) {
+    function verify_csrf_token($token) {
+        return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+    }
+}
+
 // Processar uploads
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Verificar CSRF token
+    $csrf_token = $_POST['csrf_token'] ?? '';
+    if (!verify_csrf_token($csrf_token)) {
+        $_SESSION['error'] = 'Token de segurança inválido';
+        header('Location: ' . BASE_PATH . '/admin/media');
+        exit;
+    }
+    
     if (isset($_POST['action'])) {
-        switch ($_POST['action']) {
-            case 'upload_logo':
-                if (isset($_FILES['logo']) && $_FILES['logo']['error'] === 0) {
-                    $file = $_FILES['logo'];
-                    
-                    // Verificar se é uma imagem
-                    $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
-                    if (in_array($file['type'], $allowed_types)) {
-                        // Verificar tamanho (máximo 2MB para logo)
-                        if ($file['size'] <= 2 * 1024 * 1024) {
-                            $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-                            $filename = 'logo-avyahub.' . $extension;
-                            $filepath = '../assets/' . $filename;
-                            
-                            // Criar diretório assets se não existir
-                            if (!is_dir('../assets/')) {
-                                mkdir('../assets/', 0755, true);
-                            }
-                            
-                            if (move_uploaded_file($file['tmp_name'], $filepath)) {
-                                // Atualizar configuração no banco
-                                $stmt = $pdo->prepare("UPDATE site_settings SET setting_value = ? WHERE setting_key = 'logo_url'");
-                                $stmt->execute(['/assets/' . $filename]);
-                                
-                                $_SESSION['success'] = 'Logo atualizado com sucesso!';
-                            } else {
-                                $_SESSION['error'] = 'Erro ao fazer upload do logo.';
-                            }
-                        } else {
-                            $_SESSION['error'] = 'Logo muito grande. Máximo 2MB.';
-                        }
-                    } else {
-                        $_SESSION['error'] = 'Formato de arquivo não suportado para logo.';
-                    }
-                }
-                break;
-                
-            case 'upload_favicon':
-                if (isset($_FILES['favicon']) && $_FILES['favicon']['error'] === 0) {
-                    $file = $_FILES['favicon'];
-                    
-                    // Verificar se é uma imagem adequada para favicon
-                    $allowed_types = ['image/x-icon', 'image/vnd.microsoft.icon', 'image/png', 'image/jpeg'];
-                    if (in_array($file['type'], $allowed_types)) {
-                        if ($file['size'] <= 100 * 1024) { // 100KB max para favicon
-                            $filename = 'favicon.ico';
-                            $filepath = '../assets/' . $filename;
-                            
-                            if (!is_dir('../assets/')) {
-                                mkdir('../assets/', 0755, true);
-                            }
-                            
-                            if (move_uploaded_file($file['tmp_name'], $filepath)) {
-                                $stmt = $pdo->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES ('favicon_url', '/assets/favicon.ico') ON DUPLICATE KEY UPDATE setting_value = '/assets/favicon.ico'");
-                                $stmt->execute();
-                                
-                                $_SESSION['success'] = 'Favicon atualizado com sucesso!';
-                            } else {
-                                $_SESSION['error'] = 'Erro ao fazer upload do favicon.';
-                            }
-                        } else {
-                            $_SESSION['error'] = 'Favicon muito grande. Máximo 100KB.';
-                        }
-                    } else {
-                        $_SESSION['error'] = 'Formato não suportado. Use .ico, .png ou .jpg para favicon.';
-                    }
-                }
-                break;
-                
-            case 'delete_media':
-                $filename = $_POST['filename'];
-                $filepath = '../assets/' . basename($filename);
-                
-                if (file_exists($filepath) && strpos(realpath($filepath), realpath('../assets/')) === 0) {
-                    if (unlink($filepath)) {
-                        // Remover referência do banco se for logo ou favicon
-                        if (strpos($filename, 'logo') !== false) {
-                            $stmt = $pdo->prepare("UPDATE site_settings SET setting_value = '' WHERE setting_key = 'logo_url'");
-                            $stmt->execute();
-                        } elseif (strpos($filename, 'favicon') !== false) {
-                            $stmt = $pdo->prepare("DELETE FROM site_settings WHERE setting_key = 'favicon_url'");
-                            $stmt->execute();
-                        }
+        try {
+            switch ($_POST['action']) {
+                case 'upload_logo':
+                    if (isset($_FILES['logo']) && $_FILES['logo']['error'] === 0) {
+                        $file = $_FILES['logo'];
                         
-                        $_SESSION['success'] = 'Arquivo removido com sucesso!';
+                        // Verificar se é uma imagem
+                        $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+                        if (in_array($file['type'], $allowed_types)) {
+                            // Verificar tamanho (máximo 2MB para logo)
+                            if ($file['size'] <= 2 * 1024 * 1024) {
+                                $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+                                $filename = 'logo-avyahub.' . $extension;
+                                $filepath = '../assets/' . $filename;
+                                
+                                // Criar diretório assets se não existir
+                                if (!is_dir('../assets/')) {
+                                    mkdir('../assets/', 0755, true);
+                                }
+                                
+                                if (move_uploaded_file($file['tmp_name'], $filepath)) {
+                                    // Atualizar configuração no banco
+                                    $stmt = $pdo->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES ('logo_url', ?) ON DUPLICATE KEY UPDATE setting_value = ?");
+                                    $logoUrl = url('/assets/' . $filename);
+                                    $stmt->execute([$logoUrl, $logoUrl]);
+                                    
+                                    $_SESSION['success'] = 'Logo atualizado com sucesso!';
+                                } else {
+                                    $_SESSION['error'] = 'Erro ao fazer upload do logo.';
+                                }
+                            } else {
+                                $_SESSION['error'] = 'Logo muito grande. Máximo 2MB.';
+                            }
+                        } else {
+                            $_SESSION['error'] = 'Formato de arquivo não suportado para logo.';
+                        }
                     } else {
-                        $_SESSION['error'] = 'Erro ao remover arquivo.';
+                        $_SESSION['error'] = 'Nenhum arquivo de logo selecionado.';
                     }
-                }
-                break;
+                    break;
+                    
+                case 'upload_favicon':
+                    if (isset($_FILES['favicon']) && $_FILES['favicon']['error'] === 0) {
+                        $file = $_FILES['favicon'];
+                        
+                        // Verificar se é uma imagem adequada para favicon
+                        $allowed_types = ['image/x-icon', 'image/vnd.microsoft.icon', 'image/png', 'image/jpeg'];
+                        if (in_array($file['type'], $allowed_types)) {
+                            if ($file['size'] <= 100 * 1024) { // 100KB max para favicon
+                                $filename = 'favicon.ico';
+                                $filepath = '../assets/' . $filename;
+                                
+                                if (!is_dir('../assets/')) {
+                                    mkdir('../assets/', 0755, true);
+                                }
+                                
+                                if (move_uploaded_file($file['tmp_name'], $filepath)) {
+                                    $faviconUrl = url('/assets/favicon.ico');
+                                    $stmt = $pdo->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES ('favicon_url', ?) ON DUPLICATE KEY UPDATE setting_value = ?");
+                                    $stmt->execute([$faviconUrl, $faviconUrl]);
+                                    
+                                    $_SESSION['success'] = 'Favicon atualizado com sucesso!';
+                                } else {
+                                    $_SESSION['error'] = 'Erro ao fazer upload do favicon.';
+                                }
+                            } else {
+                                $_SESSION['error'] = 'Favicon muito grande. Máximo 100KB.';
+                            }
+                        } else {
+                            $_SESSION['error'] = 'Formato não suportado. Use .ico, .png ou .jpg para favicon.';
+                        }
+                    } else {
+                        $_SESSION['error'] = 'Nenhum arquivo de favicon selecionado.';
+                    }
+                    break;
+                    
+                case 'delete_media':
+                    $filename = $_POST['filename'] ?? '';
+                    if (empty($filename)) {
+                        $_SESSION['error'] = 'Nome do arquivo não especificado.';
+                        break;
+                    }
+                    
+                    $filepath = '../assets/' . basename($filename);
+                    
+                    if (file_exists($filepath) && strpos(realpath($filepath), realpath('../assets/')) === 0) {
+                        if (unlink($filepath)) {
+                            // Remover referência do banco se for logo ou favicon
+                            if (strpos($filename, 'logo') !== false) {
+                                $stmt = $pdo->prepare("UPDATE site_settings SET setting_value = '' WHERE setting_key = 'logo_url'");
+                                $stmt->execute();
+                            } elseif (strpos($filename, 'favicon') !== false) {
+                                $stmt = $pdo->prepare("DELETE FROM site_settings WHERE setting_key = 'favicon_url'");
+                                $stmt->execute();
+                            }
+                            
+                            $_SESSION['success'] = 'Arquivo removido com sucesso!';
+                        } else {
+                            $_SESSION['error'] = 'Erro ao remover arquivo.';
+                        }
+                    } else {
+                        $_SESSION['error'] = 'Arquivo não encontrado ou acesso negado.';
+                    }
+                    break;
+            }
+        } catch (Exception $e) {
+            $_SESSION['error'] = 'Erro interno: ' . $e->getMessage();
         }
         
-        header('Location: /admin/media');
+        header('Location: ' . BASE_PATH . '/admin/media');
         exit;
     }
 }
 
 // Obter configurações atuais
-$stmt = $pdo->query("SELECT setting_key, setting_value FROM site_settings WHERE setting_key IN ('logo_url', 'favicon_url')");
-$media_settings = [];
-while ($row = $stmt->fetch()) {
-    $media_settings[$row['setting_key']] = $row['setting_value'];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM site_settings WHERE setting_key IN ('logo_url', 'favicon_url')");
+    $media_settings = [];
+    while ($row = $stmt->fetch()) {
+        $media_settings[$row['setting_key']] = $row['setting_value'];
+    }
+} catch (Exception $e) {
+    $media_settings = [];
+    $_SESSION['error'] = 'Erro ao obter configurações de mídia';
 }
 
 // Listar arquivos na pasta assets
@@ -119,11 +175,13 @@ if (is_dir('../assets/')) {
                 'name' => $file,
                 'size' => filesize($filepath),
                 'modified' => filemtime($filepath),
-                'url' => '/assets/' . $file
+                'url' => url('/assets/' . $file)
             ];
         }
     }
 }
+
+$csrf_token = get_csrf_token();
 
 ob_start();
 ?>
@@ -150,6 +208,7 @@ ob_start();
         <?php endif; ?>
         
         <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
             <input type="hidden" name="action" value="upload_logo">
             
             <div class="form-group">
@@ -159,15 +218,16 @@ ob_start();
             </div>
             
             <button type="submit" class="btn btn-success">📤 Enviar Logo</button>
-            
-            <?php if (!empty($media_settings['logo_url'])): ?>
-            <form method="POST" style="display: inline; margin-left: 0.5rem;" onsubmit="return confirm('Tem certeza que deseja remover o logo atual?')">
-                <input type="hidden" name="action" value="delete_media">
-                <input type="hidden" name="filename" value="<?= basename($media_settings['logo_url']) ?>">
-                <button type="submit" class="btn btn-danger btn-sm">🗑️ Remover</button>
-            </form>
-            <?php endif; ?>
         </form>
+        
+        <?php if (!empty($media_settings['logo_url'])): ?>
+        <form method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('Tem certeza que deseja remover o logo atual?')">
+            <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
+            <input type="hidden" name="action" value="delete_media">
+            <input type="hidden" name="filename" value="<?= basename($media_settings['logo_url']) ?>">
+            <button type="submit" class="btn btn-danger btn-sm">🗑️ Remover</button>
+        </form>
+        <?php endif; ?>
     </div>
     
     <!-- Upload de Favicon -->
@@ -186,6 +246,7 @@ ob_start();
         <?php endif; ?>
         
         <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
             <input type="hidden" name="action" value="upload_favicon">
             
             <div class="form-group">
@@ -195,15 +256,16 @@ ob_start();
             </div>
             
             <button type="submit" class="btn btn-success">📤 Enviar Favicon</button>
-            
-            <?php if (!empty($media_settings['favicon_url'])): ?>
-            <form method="POST" style="display: inline; margin-left: 0.5rem;" onsubmit="return confirm('Tem certeza que deseja remover o favicon atual?')">
-                <input type="hidden" name="action" value="delete_media">
-                <input type="hidden" name="filename" value="<?= basename($media_settings['favicon_url']) ?>">
-                <button type="submit" class="btn btn-danger btn-sm">🗑️ Remover</button>
-            </form>
-            <?php endif; ?>
         </form>
+        
+        <?php if (!empty($media_settings['favicon_url'])): ?>
+        <form method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('Tem certeza que deseja remover o favicon atual?')">
+            <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
+            <input type="hidden" name="action" value="delete_media">
+            <input type="hidden" name="filename" value="<?= basename($media_settings['favicon_url']) ?>">
+            <button type="submit" class="btn btn-danger btn-sm">🗑️ Remover</button>
+        </form>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -245,6 +307,7 @@ ob_start();
                         <div style="display: flex; gap: 0.5rem;">
                             <a href="<?= htmlspecialchars($file['url']) ?>" target="_blank" class="btn btn-sm" style="background: #38a169;">👁️</a>
                             <form method="POST" style="display: inline;" onsubmit="return confirm('Tem certeza que deseja excluir este arquivo?')">
+                                <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
                                 <input type="hidden" name="action" value="delete_media">
                                 <input type="hidden" name="filename" value="<?= htmlspecialchars($file['name']) ?>">
                                 <button type="submit" class="btn btn-sm btn-danger">🗑️</button>
