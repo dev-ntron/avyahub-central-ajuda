@@ -1,11 +1,8 @@
 <?php
 /**
  * Migração: adiciona usuários, tentativas de login e auditoria
- * Altere e execute via install/database.php ou isoladamente.
  */
-
 function addAuthTables(PDO $pdo) {
-    // Tabela de usuários
     $pdo->exec("CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
@@ -19,9 +16,8 @@ function addAuthTables(PDO $pdo) {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_username (username),
         INDEX idx_role (role)
-    ) ENGINE=InnoDB");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de tentativas de login (rate limiting)
     $pdo->exec("CREATE TABLE IF NOT EXISTS login_attempts (
         id INT AUTO_INCREMENT PRIMARY KEY,
         ip VARCHAR(45) NOT NULL,
@@ -29,9 +25,8 @@ function addAuthTables(PDO $pdo) {
         attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_ip (ip),
         INDEX idx_user (username)
-    ) ENGINE=InnoDB");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de auditoria
     $pdo->exec("CREATE TABLE IF NOT EXISTS audit_log (
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id INT NULL,
@@ -42,6 +37,5 @@ function addAuthTables(PDO $pdo) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
         INDEX idx_action (action)
-    ) ENGINE=InnoDB");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
-?>
