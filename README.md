@@ -24,7 +24,9 @@ Sistema completo de central de ajuda inspirado no GitBook, desenvolvido especifi
 - ✅ Personalização de cores e configurações
 - ✅ Preview em tempo real
 - ✅ Sistema de rascunhos
-- ✅ Autenticação baseada em variáveis de ambiente
+- ✅ Autenticação baseada em banco de dados (users)
+- ✅ Log de auditoria de acesso/admin
+- ✅ Rate limiting e CSRF no login
 
 ### Funcionalidades Técnicas
 - ✅ PHP puro com configuração por .env
@@ -33,7 +35,6 @@ Sistema completo de central de ajuda inspirado no GitBook, desenvolvido especifi
 - ✅ Cache e otimizações de performance
 - ✅ Upload seguro de arquivos
 - ✅ Proteção contra XSS e SQL Injection
-- ✅ Configuração por variáveis de ambiente
 - ✅ Timeout de sessão administrativo
 
 ## 📋 Requisitos
@@ -49,9 +50,10 @@ Sistema completo de central de ajuda inspirado no GitBook, desenvolvido especifi
 2. Acesse: `https://seudominio.com/install/`
 3. Siga o assistente em 3 etapas:
    - Requisitos do ambiente
-   - Configuração (.env + banco)
-   - Finalização (flag de instalação)
-4. Acesse:
+   - Configuração (.env + banco de dados + admin)
+   - Finalização
+4. Usuário admin é criado direto no banco de dados (tabela users) usando as credenciais cadastradas no instalador.
+5. Acesse:
    - Frontend: `https://seudominio.com`
    - Admin: `https://seudominio.com/admin`
 
@@ -79,10 +81,6 @@ Sistema completo de central de ajuda inspirado no GitBook, desenvolvido especifi
    DB_USER=seu_usuario
    DB_PASS=sua_senha
    
-   # Credenciais admin (ALTERE EM PRODUÇÃO!)
-   ADMIN_USERNAME=seu_admin
-   ADMIN_PASSWORD=sua_senha_segura
-   
    # Ambiente
    APP_ENV=production
    APP_DEBUG=false
@@ -91,6 +89,7 @@ Sistema completo de central de ajuda inspirado no GitBook, desenvolvido especifi
 3. **Configure o banco de dados:**
    ```bash
    mysql -u root -p < install/install.sql
+   php -r "require 'install/database.php'; require 'install/migrations_auth.php'; addAuthTables(new PDO('mysql:host=localhost;dbname=avyahub_help','user','senha'))"
    ```
 
 4. **Configure o Apache:**
@@ -104,15 +103,22 @@ Sistema completo de central de ajuda inspirado no GitBook, desenvolvido especifi
    chmod 755 assets/
    ```
 
+6. **Crie o usuário admin manualmente:**
+   ```sql
+   INSERT INTO users (name, username, password_hash, role, is_active) VALUES ('Administrador','seuadmin','$2y$10$HASHGERADO', 'admin', 1);
+   ```
+   - Use um gerador de senha bcrypt para criar o hash (exemplo: password_hash no PHP CLI)
+
+
 ## 🔐 Acesso Administrativo
 
 **URL:** `/admin`
 
-As credenciais são definidas no arquivo `.env`:
-- **Usuário:** valor da variável `ADMIN_USERNAME`
-- **Senha:** valor da variável `ADMIN_PASSWORD`
+As credenciais são cadastradas no banco de dados (tabela `users`).
+- **Usuário:** preencha durante o instalador ou insira manualmente
+- **Senha:** cadastrada durante o instalador
 
-> ⚠️ **Segurança:** Sempre altere as credenciais padrão em produção e use senhas fortes!
+> ⚠️ **Segurança:** Sempre use senhas fortes para o admin! Considere auditar os acessos no painel de auditoria.
 
 ## 🎨 Personalização
 
@@ -135,9 +141,12 @@ Acesse `/admin/settings` para personalizar:
 - Proteção contra SQL Injection (PDO prepared statements)
 - Validação rigorosa de uploads
 - Timeout de sessão administrativo (2 horas)
-- Variáveis de ambiente para credenciais
+- Variáveis de ambiente separadas das de usuário admin
 - Proteção de arquivos via .htaccess
 - Sanitização de dados de entrada
+- Log de auditoria de acesso/admin
+- Rate limiting no login
+- CSRF tokens globais
 
 ### Recomendações de Produção
 1. **HTTPS obrigatório:** Configure SSL/TLS
@@ -146,14 +155,14 @@ Acesse `/admin/settings` para personalizar:
 4. **Monitoramento:** Logs de acesso e erro
 5. **Atualizações:** Mantenha PHP e MySQL atualizados
 
-## 🧪 Verificação de Integridade (opcional)
+## 🧪 Verificação de Integridade
 
-Após a instalação, você pode checar rapidamente o ambiente:
+Após a instalação, acesse `/admin/check.php` (somente admin logado) para checar rapidamente:
 - Escrita em `uploads/` e `assets/`
-- Conexão com o banco e latência
-- Presença do arquivo `.env` e da flag `install/.installed`
-
-Se quiser, podemos adicionar uma rota protegida para executar esses checks sob demanda.
+- Permissão e presença de `.env` e da flag `install/.installed`
+- Conexão e latência do banco
+- Existência das tabelas essenciais
+- Extensões e versão do PHP/MySQL
 
 ---
 
