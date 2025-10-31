@@ -1,6 +1,6 @@
 <?php
 function createTables($pdo) {
-    // Estrutura existente
+    // Tabelas principais
     $pdo->exec("CREATE TABLE IF NOT EXISTS categories (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
@@ -13,7 +13,8 @@ function createTables($pdo) {
         FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE CASCADE,
         INDEX idx_slug (slug),
         INDEX idx_order (order_position)
-    ) ENGINE=InnoDB");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     $pdo->exec("CREATE TABLE IF NOT EXISTS articles (
         id INT AUTO_INCREMENT PRIMARY KEY,
         category_id INT NOT NULL,
@@ -21,23 +22,25 @@ function createTables($pdo) {
         slug VARCHAR(255) UNIQUE NOT NULL,
         content LONGTEXT,
         excerpt TEXT,
-        is_published BOOLEAN DEFAULT TRUE,
+        is_published TINYINT(1) DEFAULT 1,
         order_position INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
         INDEX idx_slug (slug),
         INDEX idx_published (is_published),
-        INDEX idx_category (category_id),
-        FULLTEXT idx_search (title, content, excerpt)
-    ) ENGINE=InnoDB");
+        INDEX idx_category (category_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     $pdo->exec("CREATE TABLE IF NOT EXISTS site_settings (
         id INT AUTO_INCREMENT PRIMARY KEY,
         setting_key VARCHAR(100) UNIQUE NOT NULL,
         setting_value TEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_key (setting_key)
-    ) ENGINE=InnoDB");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // Índice auxiliar de busca (opcional sem FULLTEXT)
     $pdo->exec("CREATE TABLE IF NOT EXISTS search_index (
         id INT AUTO_INCREMENT PRIMARY KEY,
         content_type ENUM('article', 'category') NOT NULL,
@@ -45,11 +48,10 @@ function createTables($pdo) {
         title VARCHAR(255),
         content LONGTEXT,
         searchable_text LONGTEXT,
-        INDEX idx_content (content_type, content_id),
-        FULLTEXT idx_search_text (title, content, searchable_text)
-    ) ENGINE=InnoDB");
+        INDEX idx_content (content_type, content_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Inserir configurações padrão
+    // Configurações padrão
     $settings = [
         ['setting_key' => 'site_title', 'setting_value' => 'Central de Ajuda AvyaHub'],
         ['setting_key' => 'site_description', 'setting_value' => 'Documentação completa da plataforma de atendimento AvyaHub'],
@@ -64,16 +66,9 @@ function createTables($pdo) {
         $stmt->execute([$setting['setting_key'], $setting['setting_value']]);
     }
 
-    // Tabelas de autenticação (migracao)
+    // Tabelas de autenticação
     require_once __DIR__ . '/migrations_auth.php';
     addAuthTables($pdo);
 
-    // Seed inicial
-    insertSampleData($pdo);
+    // Seeds mínimos opcionais (mantenha vazio para produção)
 }
-
-function insertSampleData($pdo) {
-    // ... (conteúdo existente inalterado)
-    // (mantivemos os mesmos inserts de categorias e artigos)
-}
-?>
