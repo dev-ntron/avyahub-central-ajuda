@@ -1,5 +1,0 @@
-Teste de conexão direta com GitHub
-Data: 2025-10-31 04:36 AM
-Status: CONECTADO e funcionando!
-
-Este arquivo foi criado para confirmar que a integração com o repositório está ativa.
