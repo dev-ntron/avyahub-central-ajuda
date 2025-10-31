@@ -60,35 +60,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'test_connection') {
         $response = ['success' => false, 'message' => ''];
+        header('Content-Type: application/json; charset=utf-8');
         try {
-            $host = trim($_POST['db_host']);
-            $name = trim($_POST['db_name']);
-            $user = trim($_POST['db_user']);
-            $pass = $_POST['db_pass'];
-            $pdo = new PDO("mysql:host=$host;charset=utf8mb4", $user, $pass);
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            $stmt = $pdo->query("SHOW DATABASES LIKE '" . addslashes($name) . "'");
+            $host = trim((string)($_POST['db_host'] ?? ''));
+            $name = trim((string)($_POST['db_name'] ?? ''));
+            $user = trim((string)($_POST['db_user'] ?? ''));
+            $pass = (string)($_POST['db_pass'] ?? '');
+            if ($host === '' || $name === '' || $user === '') { throw new Exception('Preencha host, nome do banco e usuário.'); }
+            $pdo = new PDO("mysql:host=$host;charset=utf8mb4", $user, $pass, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+            $stmt = $pdo->prepare("SHOW DATABASES LIKE ?");
+            $stmt->execute([$name]);
             $exists = $stmt->rowCount() > 0;
             if ($exists) {
-                new PDO("mysql:host=$host;dbname=$name;charset=utf8mb4", $user, $pass);
+                new PDO("mysql:host=$host;dbname=$name;charset=utf8mb4", $user, $pass, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
                 $response = ['success' => true, 'message' => 'Conexão perfeita! Database existe e está acessível.'];
             } else {
-                try { $pdo->exec("CREATE DATABASE IF NOT EXISTS `$name`\n  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"); $pdo->exec("DROP DATABASE `$name`"); $response = ['success' => true, 'message' => 'Conexão OK. Database será criado automaticamente na instalação.']; } catch (Exception $e) { $response = ['success' => true, 'message' => 'Conexão OK, mas sem permissão CREATE DATABASE. Crie manualmente o database: ' . htmlspecialchars($name)]; }
+                $response = ['success' => true, 'message' => 'Conexão OK. Database será criado automaticamente na instalação (se habilitado).'];
             }
-        } catch (Exception $e) { $response['message'] = 'Erro de conexão: ' . $e->getMessage(); }
-        header('Content-Type: application/json'); echo json_encode($response); exit;
+        } catch (Exception $e) { http_response_code(400); $response['message'] = 'Erro de conexão: ' . $e->getMessage(); }
+        echo json_encode($response, JSON_UNESCAPED_UNICODE); exit;
     }
     if ($action === 'install') {
         $errors = [];
         $cfg = [
-            'DB_HOST' => trim($_POST['db_host'] ?? ''),
-            'DB_NAME' => trim($_POST['db_name'] ?? ''),
-            'DB_USER' => trim($_POST['db_user'] ?? ''),
-            'DB_PASS' => $_POST['db_pass'] ?? '',
-            'ADMIN_USERNAME' => trim($_POST['admin_username'] ?? ''),
-            'ADMIN_PASSWORD' => $_POST['admin_password'] ?? '',
-            'APP_ENV' => $_POST['app_env'] ?? 'development',
-            'APP_DEBUG' => ($_POST['app_env'] ?? 'development') === 'development' ? 'true' : 'false',
+            'DB_HOST' => trim((string)($_POST['db_host'] ?? '')),
+            'DB_NAME' => trim((string)($_POST['db_name'] ?? '')),
+            'DB_USER' => trim((string)($_POST['db_user'] ?? '')),
+            'DB_PASS' => (string)($_POST['db_pass'] ?? ''),
+            'ADMIN_USERNAME' => trim((string)($_POST['admin_username'] ?? '')),
+            'ADMIN_PASSWORD' => (string)($_POST['admin_password'] ?? ''),
+            'APP_ENV' => ($_POST['app_env'] ?? 'development') === 'production' ? 'production' : 'development',
+            'APP_DEBUG' => (($_POST['app_env'] ?? 'development') === 'development') ? 'true' : 'false',
             'APP_SECRET_KEY' => bin2hex(random_bytes(32))
         ];
         if ($cfg['DB_HOST'] === '') $errors[] = 'Host do banco é obrigatório';
@@ -98,11 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (strlen($cfg['ADMIN_PASSWORD']) < 8) $errors[] = 'Senha admin deve ter pelo menos 8 caracteres';
         if (empty($errors)) {
             try {
-                $pdo = new PDO("mysql:host={$cfg['DB_HOST']};charset=utf8mb4", $cfg['DB_USER'], $cfg['DB_PASS']);
-                $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                $pdo = new PDO("mysql:host={$cfg['DB_HOST']};charset=utf8mb4", $cfg['DB_USER'], $cfg['DB_PASS'], [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
                 if (isset($_POST['create_database'])) { $pdo->exec("CREATE DATABASE IF NOT EXISTS `{$cfg['DB_NAME']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"); }
-                $pdo = new PDO("mysql:host={$cfg['DB_HOST']};dbname={$cfg['DB_NAME']};charset=utf8mb4", $cfg['DB_USER'], $cfg['DB_PASS']);
-                $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                $pdo = new PDO("mysql:host={$cfg['DB_HOST']};dbname={$cfg['DB_NAME']};charset=utf8mb4", $cfg['DB_USER'], $cfg['DB_PASS'], [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
 
                 // 1) Criar tabelas
                 require_once __DIR__ . '/database.php';
@@ -110,9 +110,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 createTables($pdo);
                 addAuthTables($pdo);
 
-                // 2) Criar .env sem ADMIN_ (somente DB + app)
+                // 2) Criar .env (sem ADMIN_*)
                 $env = "DB_HOST={$cfg['DB_HOST']}\nDB_NAME={$cfg['DB_NAME']}\nDB_USER={$cfg['DB_USER']}\nDB_PASS={$cfg['DB_PASS']}\n\nSITE_URL=/\nUPLOADS_DIR=uploads/\nMAX_UPLOAD_SIZE=5242880\nAPP_ENV={$cfg['APP_ENV']}\nAPP_DEBUG={$cfg['APP_DEBUG']}\nAPP_TIMEZONE=America/Sao_Paulo\nENABLE_CACHE=true\nCACHE_DURATION=3600\nAPP_SECRET_KEY={$cfg['APP_SECRET_KEY']}\n";
-                if (!file_put_contents(__DIR__ . '/../.env', $env)) { throw new Exception('Não foi possível criar .env (permissões)'); }
+                if (@file_put_contents(__DIR__ . '/../.env', $env) === false) { throw new Exception('Não foi possível criar .env (permissões)'); }
                 @chmod(__DIR__ . '/../.env', 0640);
 
                 // 3) Criar usuário admin na tabela users
@@ -121,8 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute(['Administrador', $cfg['ADMIN_USERNAME'], $hash, 'admin']);
 
                 // 4) Flag de instalação
-                file_put_contents($installed_file, date('Y-m-d H:i:s'));
-                
+                @file_put_contents($installed_file, date('Y-m-d H:i:s'));
                 header('Location: /install/?step=3'); exit;
             } catch (Exception $e) { $errors[] = $e->getMessage(); }
         }
