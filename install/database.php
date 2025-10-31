@@ -172,11 +172,4 @@ function runCompleteMigrations($pdo) {
     
     return true;
 }
-
-/**
- * Alias para compatibilidade - chama createTables que já inclui tudo
- */
-function runCompleteMigrations($pdo) {
-    return createTables($pdo);
-}
 ?>
