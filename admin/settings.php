@@ -1,36 +1,94 @@
 <?php
 $page_title = 'Configurações';
 
+// Usar createDatabaseConnection() se não existir $pdo
+if (!isset($pdo)) {
+    try {
+        $pdo = createDatabaseConnection();
+    } catch (Exception $e) {
+        $_SESSION['error'] = 'Erro de conexão com banco de dados';
+        header('Location: ' . BASE_PATH . '/admin');
+        exit;
+    }
+}
+
+// CSRF helper functions (assumindo que estão no auth.php ou config.php)
+if (!function_exists('get_csrf_token')) {
+    function get_csrf_token() {
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return $_SESSION['csrf_token'];
+    }
+}
+if (!function_exists('verify_csrf_token')) {
+    function verify_csrf_token($token) {
+        return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+    }
+}
+
 // Processar atualizações
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Verificar CSRF token
+    $csrf_token = $_POST['csrf_token'] ?? '';
+    if (!verify_csrf_token($csrf_token)) {
+        $_SESSION['error'] = 'Token de segurança inválido';
+        header('Location: ' . BASE_PATH . '/admin/settings');
+        exit;
+    }
+    
     if (isset($_POST['action']) && $_POST['action'] === 'update_settings') {
-        $settings_to_update = [
-            'site_title',
-            'site_description',
-            'primary_color',
-            'secondary_color',
-            'footer_text'
-        ];
-        
-        foreach ($settings_to_update as $setting) {
-            if (isset($_POST[$setting])) {
-                $stmt = $pdo->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
-                $stmt->execute([$setting, $_POST[$setting], $_POST[$setting]]);
+        try {
+            $settings_to_update = [
+                'site_title',
+                'site_description',
+                'primary_color',
+                'secondary_color',
+                'footer_text'
+            ];
+            
+            foreach ($settings_to_update as $setting) {
+                if (isset($_POST[$setting])) {
+                    $value = trim($_POST[$setting]);
+                    
+                    // Validações específicas
+                    if ($setting === 'primary_color' || $setting === 'secondary_color') {
+                        if (!preg_match('/^#[0-9A-F]{6}$/i', $value)) {
+                            $_SESSION['error'] = 'Cor inválida: ' . $setting;
+                            break;
+                        }
+                    }
+                    
+                    $stmt = $pdo->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
+                    $stmt->execute([$setting, $value, $value]);
+                }
             }
+            
+            if (!isset($_SESSION['error'])) {
+                $_SESSION['success'] = 'Configurações atualizadas com sucesso!';
+            }
+        } catch (Exception $e) {
+            $_SESSION['error'] = 'Erro ao atualizar configurações: ' . $e->getMessage();
         }
         
-        $_SESSION['success'] = 'Configurações atualizadas com sucesso!';
-        header('Location: /admin/settings');
+        header('Location: ' . BASE_PATH . '/admin/settings');
         exit;
     }
 }
 
 // Obter configurações atuais
-$stmt = $pdo->query("SELECT setting_key, setting_value FROM site_settings");
-$settings = [];
-while ($row = $stmt->fetch()) {
-    $settings[$row['setting_key']] = $row['setting_value'];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM site_settings");
+    $settings = [];
+    while ($row = $stmt->fetch()) {
+        $settings[$row['setting_key']] = $row['setting_value'];
+    }
+} catch (Exception $e) {
+    $settings = [];
+    $_SESSION['error'] = 'Erro ao obter configurações';
 }
+
+$csrf_token = get_csrf_token();
 
 ob_start();
 ?>
@@ -41,6 +99,7 @@ ob_start();
 </div>
 
 <form method="POST">
+    <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
     <input type="hidden" name="action" value="update_settings">
     
     <div style="display: grid; grid-template-columns: 1fr 300px; gap: 2rem;">
@@ -134,11 +193,11 @@ ob_start();
                     💾 Salvar Configurações
                 </button>
                 
-                <a href="/" class="btn" target="_blank" style="width: 100%; text-align: center; display: block; margin-bottom: 0.5rem; background: #38a169;">
+                <a href="<?= url('/') ?>" class="btn" target="_blank" style="width: 100%; text-align: center; display: block; margin-bottom: 0.5rem; background: #38a169;">
                     🌍 Visualizar Site
                 </a>
                 
-                <a href="/admin/media" class="btn" style="width: 100%; text-align: center; display: block; margin-bottom: 0.5rem; background: #d69e2e;">
+                <a href="<?= url('/admin/media') ?>" class="btn" style="width: 100%; text-align: center; display: block; margin-bottom: 0.5rem; background: #d69e2e;">
                     🖼️ Gerenciar Mídia
                 </a>
                 
@@ -147,13 +206,17 @@ ob_start();
                     
                     <?php
                     // Obter estatísticas rápidas
-                    $stats = [];
-                    $stmt = $pdo->query("SELECT COUNT(*) FROM categories");
-                    $stats['categories'] = $stmt->fetchColumn();
-                    $stmt = $pdo->query("SELECT COUNT(*) FROM articles WHERE is_published = 1");
-                    $stats['published'] = $stmt->fetchColumn();
-                    $stmt = $pdo->query("SELECT COUNT(*) FROM articles WHERE is_published = 0");
-                    $stats['drafts'] = $stmt->fetchColumn();
+                    $stats = ['categories' => 0, 'published' => 0, 'drafts' => 0];
+                    try {
+                        $stmt = $pdo->query("SELECT COUNT(*) FROM categories");
+                        $stats['categories'] = $stmt->fetchColumn();
+                        $stmt = $pdo->query("SELECT COUNT(*) FROM articles WHERE is_published = 1");
+                        $stats['published'] = $stmt->fetchColumn();
+                        $stmt = $pdo->query("SELECT COUNT(*) FROM articles WHERE is_published = 0");
+                        $stats['drafts'] = $stmt->fetchColumn();
+                    } catch (Exception $e) {
+                        // Estatísticas ficam zeradas em caso de erro
+                    }
                     ?>
                     
                     <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
