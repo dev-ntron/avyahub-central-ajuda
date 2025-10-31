@@ -15,11 +15,9 @@ function loadEnvFile($path = '.env') {
         list($name, $value) = explode('=', $line, 2);
         $name = trim($name);
         $value = trim($value);
-        // Remover aspas simples/duplas
         if ((str_starts_with($value, '"') && str_ends_with($value, '"')) || (str_starts_with($value, "'") && str_ends_with($value, "'"))) {
             $value = substr($value, 1, -1);
         }
-        // Conversões comuns
         $lower = strtolower($value);
         if ($lower === 'true') { $value = true; }
         elseif ($lower === 'false') { $value = false; }
@@ -44,6 +42,36 @@ function env($key, $default = null) {
     return ($value === false) ? $default : $value;
 }
 
+// Descobrir protocolo e host para suportar domínio, subdomínio e subpasta
+function detectScheme() {
+    if ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && (string)$_SERVER['SERVER_PORT'] === '443')) {
+        return 'https';
+    }
+    return 'http';
+}
+function detectHost() {
+    if (!empty($_SERVER['HTTP_HOST'])) return $_SERVER['HTTP_HOST'];
+    if (!empty($_SERVER['SERVER_NAME'])) return $_SERVER['SERVER_NAME'];
+    return 'localhost';
+}
+$envBasePath = (string)env('BASE_PATH', '');
+$envBasePath = '/' . ltrim(rtrim($envBasePath, '/'), '/');
+if ($envBasePath === '//') { $envBasePath = '/'; }
+if ($envBasePath === '') { $envBasePath = '/'; }
+
+define('BASE_PATH', $envBasePath);
+
+define('BASE_SCHEME', detectScheme());
+define('BASE_HOST', detectHost());
+
+define('BASE_URL', BASE_SCHEME . '://' . BASE_HOST . (BASE_PATH === '/' ? '' : BASE_PATH));
+
+function url($path = '') {
+    $path = '/' . ltrim((string)$path, '/');
+    $prefix = BASE_PATH === '/' ? '' : BASE_PATH;
+    return BASE_SCHEME . '://' . BASE_HOST . $prefix . $path;
+}
+
 // Configurações do banco de dados
 define('DB_HOST', env('DB_HOST', 'localhost'));
 define('DB_NAME', env('DB_NAME', 'avyahub_help'));
@@ -51,10 +79,10 @@ define('DB_USER', env('DB_USER', 'root'));
 define('DB_PASS', env('DB_PASS', ''));
 
 // Configurações do sistema
-define('SITE_URL', env('SITE_URL', '/'));
-define('ADMIN_URL', '/admin');
+define('SITE_URL', env('SITE_URL', BASE_URL));
+define('ADMIN_URL', (BASE_PATH === '/' ? '' : BASE_PATH) . '/admin');
 define('UPLOADS_DIR', env('UPLOADS_DIR', 'uploads/'));
-define('MAX_UPLOAD_SIZE', env('MAX_UPLOAD_SIZE', 5 * 1024 * 1024)); // 5MB
+define('MAX_UPLOAD_SIZE', env('MAX_UPLOAD_SIZE', 5 * 1024 * 1024));
 
 // Segurança
 define('APP_SECRET_KEY', env('APP_SECRET_KEY', 'change_this_secret_key'));
@@ -69,7 +97,7 @@ define('CACHE_DURATION', env('CACHE_DURATION', 3600));
 
 // Timezone com validação
 $tz = env('APP_TIMEZONE', 'America/Sao_Paulo');
-if (!in_array($tz, timezone_identifiers_list())) { $tz = 'America/Sao_Paulo'; }
+if (!in_array($tz, timezone_identifiers_list(), true)) { $tz = 'America/Sao_Paulo'; }
 date_default_timezone_set($tz);
 
 // Erros por ambiente
@@ -102,7 +130,7 @@ function createDatabaseConnection() {
         throw new RuntimeException('Configuração de banco incompleta');
     }
     return new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+        'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
         DB_USER,
         defined('DB_PASS') ? DB_PASS : '',
         [
