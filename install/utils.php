@@ -15,3 +15,13 @@ function normalizeBasePath($path){
     }
     return $path;
 }
+
+// Retorna o BASE_PATH detectado hoje, normalizado
+function detectedBasePath(){
+    if (defined('BASE_PATH')) { return normalizeBasePath(BASE_PATH); }
+    $req = $_SERVER['REQUEST_URI'] ?? '/';
+    $script = $_SERVER['SCRIPT_NAME'] ?? '';
+    $dir = dirname($script);
+    $path = $dir !== '.' ? $dir : '/';
+    return normalizeBasePath($path);
+}
